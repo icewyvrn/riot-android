@@ -1,7 +1,8 @@
-/**
- * marked - a markdown parser
- * Copyright (c) 2011-2014, Christopher Jeffrey. (MIT Licensed)
- * https://github.com/chjj/marked
+/* Copyright 2025 New Vector Ltd.
+ * Copyright 2011-2014 , Christopher Jeffrey. (MIT Licensed)
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+ * Please see LICENSE files in the repository root for full details.
  */
 
 ;(function() {
