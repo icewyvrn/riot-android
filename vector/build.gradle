@@ -8,15 +8,16 @@ apply plugin: 'kotlin-android-extensions'
 
 buildscript {
     repositories {
+        maven { url "file://${project.rootDir}/local-repo" }
         google()
         maven {
             url "https://plugins.gradle.org/m2/"
         }
-        jcenter()
+        maven { url "https://artifactory.appodeal.com/appodeal-public" }
     }
 
     dependencies {
-        classpath "io.realm:realm-gradle-plugin:5.12.0"
+        classpath "io.realm:realm-gradle-plugin:5.14.0"
     }
 }
 
@@ -229,6 +230,7 @@ dependencies {
     implementation 'com.facebook.stetho:stetho:1.5.0'
     implementation 'com.facebook.stetho:stetho-okhttp3:1.5.0'
     implementation 'com.squareup.okio:okio:1.17.2'
+    implementation "org.conscrypt:conscrypt-android:2.5.2"
 
     // Use Glide library to display image (Gif supported)
     implementation 'com.github.bumptech.glide:glide:4.9.0'
@@ -290,7 +292,7 @@ dependencies {
 configurations.all {
     resolutionStrategy.eachDependency { DependencyResolveDetails details ->
         if (details.requested.group == 'com.squareup.okhttp3' && details.requested.name == 'okhttp') {
-            details.useVersion '3.12.3'
+            details.useVersion '3.12.13'
             details.because '3.13+ dropped support for android <5'
         }
     }

@@ -83,6 +83,9 @@ import im.vector.util.RageShake;
 import im.vector.util.VectorMarkdownParser;
 import im.vector.util.VectorUtils;
 
+import org.conscrypt.Conscrypt;
+import java.security.Security;
+
 /**
  * The main application injection point
  */
@@ -193,7 +196,12 @@ public class VectorApp extends MultiDexApplication {
 
     @Override
     public void onCreate() {
-        Log.d(LOG_TAG, "onCreate");
+        try {
+            Security.insertProviderAt(Conscrypt.newProvider(), 1);
+        } catch (Throwable e) {
+            // Fallback or log error if provider fails to load
+            Log.d(LOG_TAG, "onCreate");
+        }
         super.onCreate();
 
         mLifeCycleListener = new VectorLifeCycleObserver();

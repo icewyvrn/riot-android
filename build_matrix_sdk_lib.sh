@@ -44,7 +44,7 @@ echo "remove sdk folder"
 rm -rf matrix-android-sdk
 
 echo "clone the matrix-android-sdk repository, and checkout ${branch} branch"
-git clone -b ${branch} https://github.com/matrix-org/matrix-android-sdk
+git clone -b ${branch} https://github.com/vietsman/matrix-android-sdk
 
 cd matrix-android-sdk
 
