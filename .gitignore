@@ -15,3 +15,5 @@
 /tmp
 
 captures/
+/local
+vector/libs-v*
