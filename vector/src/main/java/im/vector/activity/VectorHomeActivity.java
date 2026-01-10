@@ -388,7 +388,7 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
         // Check whether the user has agreed to the use of analytics tracking
 
         if (!PreferencesManager.didAskToUseAnalytics(this)) {
-            promptForAnalyticsTracking();
+//            promptForAnalyticsTracking();
         }
 
         // process intent parameters
