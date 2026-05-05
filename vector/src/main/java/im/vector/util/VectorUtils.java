@@ -144,7 +144,7 @@ public class VectorUtils {
     //==============================================================================================================
 
     // avatars cache
-    static final private LruCache<String, Bitmap> mAvatarImageByKeyDict = new LruCache<>(20 * 1024 * 1024);
+    static final private LruCache<String, Bitmap> mAvatarImageByKeyDict = new LruCache<>(5 * 1024 * 1024);
     // the avatars background color
     static final private List<Integer> mColorList = new ArrayList<>();
 

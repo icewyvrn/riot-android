@@ -44,6 +44,8 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+
+import com.bumptech.glide.Glide;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
@@ -1195,7 +1197,7 @@ public class CommonActivityUtils {
     public static void onTrimMemory(Activity activity, int level) {
         String activityName = (null != activity) ? activity.getClass().getSimpleName() : "NotAvailable";
         Log.e(LOW_MEMORY_LOG_TAG, "Active application : onTrimMemory from " + activityName + " level=" + level);
-        // TODO implement things to reduce memory usage
+        Glide.get(activity).trimMemory(level);
 
         displayMemoryInformation(activity, "onTrimMemory");
     }

@@ -247,6 +247,7 @@ public class PeopleFragment extends AbsHomeFragment implements ContactsManager.C
     private void initViews() {
         int margin = (int) getResources().getDimension(R.dimen.item_decoration_left_margin);
         mRecycler.setLayoutManager(new LinearLayoutManager(getActivity(), RecyclerView.VERTICAL, false));
+        mRecycler.setHasFixedSize(true);
         mRecycler.addItemDecoration(new SimpleDividerItemDecoration(getActivity(), DividerItemDecoration.VERTICAL, margin));
         mRecycler.addItemDecoration(new EmptyViewItemDecoration(getActivity(), DividerItemDecoration.VERTICAL, 40, 16, 14));
         mAdapter = new PeopleAdapter(getActivity(), new PeopleAdapter.OnSelectItemListener() {
