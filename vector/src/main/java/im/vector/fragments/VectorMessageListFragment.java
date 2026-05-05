@@ -217,6 +217,12 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
             }
         });
 
+        // Disable row bitmap caching during scroll — on low-RAM devices this competes with
+        // Glide's bitmap pool, causing evictions and re-decodes. The GPU compositing cost
+        // of disabling it is cheaper than the RAM pressure it causes.
+        mMessageListView.setScrollingCacheEnabled(false);
+        mMessageListView.setAnimationCacheEnabled(false);
+
         v.setBackgroundColor(ThemeUtils.INSTANCE.getColor(getActivity(), android.R.attr.colorBackground));
 
         return v;

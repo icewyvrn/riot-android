@@ -4,10 +4,12 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
-    <include
-        layout="@layout/vector_message_header"
-        android:visibility="gone"
-        tools:visibility="visible" />
+    <ViewStub
+        android:id="@+id/stub_message_header"
+        android:inflatedId="@+id/messagesAdapter_message_header"
+        android:layout="@layout/vector_message_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 
     <!-- the adapter cannot render empty cell so create a really thin one -->
     <View

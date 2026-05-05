@@ -142,6 +142,14 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
     // it avoids computing them several times
     private final Map<String, String> mEventFormattedTsMap = new HashMap<>();
 
+    // rendered body CharSequence by event id (for non-highlighted, non-search messages)
+    // avoids re-parsing HTML on every scroll pass
+    private final Map<String, CharSequence> mRenderedBodyMap = new HashMap<>();
+
+    // debounce rapid-fire notifyDataSetChanged() calls (image downloads, member updates, etc.)
+    private boolean mRefreshPending = false;
+    private final Handler mRefreshHandler = new Handler(Looper.getMainLooper());
+
     // define the e2e icon to use for a dedicated eventId
     // can be a drawable or
     private Map<String, Object> mE2eIconByEventId = new HashMap<>();
@@ -809,6 +817,22 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
 
     @Override
     public void notifyDataSetChanged() {
+        // Coalesce rapid-fire calls (image downloads, member updates, E2E events) into one
+        // per 100ms to avoid stacking expensive re-sorts and full list re-measures.
+        if (mRefreshPending) {
+            return;
+        }
+        mRefreshPending = true;
+        mRefreshHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                mRefreshPending = false;
+                doNotifyDataSetChanged();
+            }
+        }, 100);
+    }
+
+    private void doNotifyDataSetChanged() {
         // undelivered events must be pushed at the end of the history
         setNotifyOnChange(false);
         List<MessageRow> undeliverableEvents = new ArrayList<>();
@@ -841,6 +865,9 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         }
 
         setNotifyOnChange(true);
+
+        // invalidate cached rendered bodies — text color/highlights may have changed
+        mRenderedBodyMap.clear();
 
         // build event -> date list
         refreshRefreshDateList();
@@ -882,7 +909,11 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
      * the parent fragment is paused.
      */
     public void onPause() {
+        // cancel any pending debounced refresh
+        mRefreshHandler.removeCallbacksAndMessages(null);
+        mRefreshPending = false;
         mEventFormattedTsMap.clear();
+        mRenderedBodyMap.clear();
     }
 
     /**
@@ -898,7 +929,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
             } else {
                 mSelectedEvent = null;
             }
-            notifyDataSetChanged();
+            // Bypass debounce — user interactions must feel instant.
+            doNotifyDataSetChanged();
 
             if (mVectorMessagesAdapterEventsListener != null) {
                 mVectorMessagesAdapterEventsListener.onSelectedEventChange(mSelectedEvent);
@@ -922,7 +954,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
     public void cancelSelectionMode() {
         if (null != mSelectedEvent) {
             mSelectedEvent = null;
-            notifyDataSetChanged();
+            // Bypass debounce — user interactions must feel instant.
+            doNotifyDataSetChanged();
 
             if (mVectorMessagesAdapterEventsListener != null) {
                 mVectorMessagesAdapterEventsListener.onSelectedEventChange(mSelectedEvent);
@@ -1231,10 +1264,23 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
 
                 Spannable body = row.getText(new VectorQuoteSpan(mContext), display);
 
-                CharSequence result = mHelper.highlightPattern(body,
-                        mPattern,
-                        mBackgroundColorSpan,
-                        shouldHighlighted);
+                CharSequence result;
+
+                // Cache rendered body for the common case (normal scroll, no search pattern,
+                // not a highlighted message). HTML parsing + Spannable construction is expensive
+                // on low-end CPUs and identical every scroll pass for the same event.
+                if (!shouldHighlighted && mPattern == null) {
+                    result = mRenderedBodyMap.get(event.eventId);
+                    if (result == null) {
+                        result = mHelper.highlightPattern(body, null, mBackgroundColorSpan, false);
+                        mRenderedBodyMap.put(event.eventId, result);
+                    }
+                } else {
+                    result = mHelper.highlightPattern(body,
+                            mPattern,
+                            mBackgroundColorSpan,
+                            shouldHighlighted);
+                }
 
                 bodyTextView.setText(result);
 

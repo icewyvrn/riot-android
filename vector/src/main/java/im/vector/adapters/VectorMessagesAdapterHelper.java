@@ -33,6 +33,7 @@ import android.text.style.URLSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewStub;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -570,6 +571,18 @@ class VectorMessagesAdapterHelper {
     static void setHeader(View convertView, String newValue, int position) {
         // display the day separator
         View headerLayout = convertView.findViewById(R.id.messagesAdapter_message_header);
+
+        if (headerLayout == null) {
+            if (newValue == null) {
+                // Header not inflated and not needed — nothing to do.
+                return;
+            }
+            // Header is needed: inflate the ViewStub now.
+            ViewStub stub = convertView.findViewById(R.id.stub_message_header);
+            if (stub != null) {
+                headerLayout = stub.inflate();
+            }
+        }
 
         if (null != headerLayout) {
             if (null != newValue) {
