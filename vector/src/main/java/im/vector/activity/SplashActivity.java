@@ -66,6 +66,10 @@ public class SplashActivity extends MXCActionBarActivity {
 
     private static final String NEED_TO_CLEAR_CACHE_BEFORE_81200 = "NEED_TO_CLEAR_CACHE_BEFORE_81200";
 
+    // Set to true after the first successful sync so subsequent cold starts skip the network wait.
+    // Cleared automatically by PreferencesManager.clearPreferences() on logout.
+    private static final String PREF_HAS_COMPLETED_SYNC = "pref_has_completed_sync";
+
     /* ==========================================================================================
      * UI
      * ========================================================================================== */
@@ -128,6 +132,12 @@ public class SplashActivity extends MXCActionBarActivity {
                 intent.putExtra(VectorHomeActivity.EXTRA_JUMP_TO_ROOM_PARAMS, (HashMap) params);
             }
 
+            // Mark that we have successfully synced so subsequent cold starts skip the wait.
+            PreferenceManager.getDefaultSharedPreferences(this)
+                    .edit()
+                    .putBoolean(PREF_HAS_COMPLETED_SYNC, true)
+                    .apply();
+
             startActivity(intent);
             finish();
         } else {
@@ -142,38 +152,45 @@ public class SplashActivity extends MXCActionBarActivity {
 
     @Override
     public void initUiAndData() {
-        List<MXSession> sessions = Matrix.getInstance(getApplicationContext()).getSessions();
-
-        if (sessions == null) {
-            Log.e(LOG_TAG, "onCreate no Sessions");
-            finish();
-            return;
-        }
-
-        // Check if store is corrupted, due to change of type of some maps from HashMap to Map in Serialized objects
-        // Only on Android 7.1+
-        // Only if previous versionCode of the installation is < 81200
-        // Only once
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1
-                && PreferenceManager.getDefaultSharedPreferences(this).getInt(PreferencesManager.VERSION_BUILD, 0) < 81200
-                && PreferenceManager.getDefaultSharedPreferences(this).getBoolean(NEED_TO_CLEAR_CACHE_BEFORE_81200, true)) {
-            PreferenceManager.getDefaultSharedPreferences(this)
-                    .edit()
-                    .putBoolean(NEED_TO_CLEAR_CACHE_BEFORE_81200, false)
-                    .apply();
-
-            // Force a clear cache
-            Matrix.getInstance(this).reloadSessions(this, true);
-            return;
-        }
-
+        // Start animation immediately so the user sees visual feedback before any heavy work.
         Drawable background = animatedLogo.getBackground();
         if (background instanceof AnimationDrawable) {
             ((AnimationDrawable) background).start();
         }
 
-        // Check the lazy loading status
-        checkLazyLoadingStatus(sessions);
+        // Defer session loading one frame so the animation draws before Realm init begins.
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                List<MXSession> sessions = Matrix.getInstance(getApplicationContext()).getSessions();
+
+                if (sessions == null) {
+                    Log.e(LOG_TAG, "onCreate no Sessions");
+                    finish();
+                    return;
+                }
+
+                // Check if store is corrupted, due to change of type of some maps from HashMap to Map in Serialized objects
+                // Only on Android 7.1+
+                // Only if previous versionCode of the installation is < 81200
+                // Only once
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1
+                        && PreferenceManager.getDefaultSharedPreferences(SplashActivity.this).getInt(PreferencesManager.VERSION_BUILD, 0) < 81200
+                        && PreferenceManager.getDefaultSharedPreferences(SplashActivity.this).getBoolean(NEED_TO_CLEAR_CACHE_BEFORE_81200, true)) {
+                    PreferenceManager.getDefaultSharedPreferences(SplashActivity.this)
+                            .edit()
+                            .putBoolean(NEED_TO_CLEAR_CACHE_BEFORE_81200, false)
+                            .apply();
+
+                    // Force a clear cache
+                    Matrix.getInstance(SplashActivity.this).reloadSessions(SplashActivity.this, true);
+                    return;
+                }
+
+                // Check the lazy loading status
+                checkLazyLoadingStatus(sessions);
+            }
+        });
     }
 
     private void checkLazyLoadingStatus(final List<MXSession> sessions) {
@@ -234,6 +251,17 @@ public class SplashActivity extends MXCActionBarActivity {
     }
 
     private void startEventStreamService(Collection<MXSession> sessions) {
+        // Fast path: we have previously synced cached data — skip the network sync wait.
+        // EventStreamServiceX will sync in the background; the home screen shows cached data
+        // with the built-in sync progress bar (home_recents_sync_in_progress) while it catches up.
+        if (!Matrix.getInstance(this).mHasBeenDisconnected
+                && PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_HAS_COMPLETED_SYNC, false)) {
+            EventStreamServiceX.Companion.onApplicationStarted(this);
+            Matrix.getInstance(getApplicationContext()).getPushManager().deepCheckRegistration(this);
+            onFinish();
+            return;
+        }
+
         List<String> matrixIds = new ArrayList<>();
 
         for (final MXSession session : sessions) {
