@@ -234,9 +234,12 @@ public class VectorApp extends MultiDexApplication {
         }
 
         VECTOR_VERSION_STRING = Matrix.getInstance(this).getVersion(true, true);
-        // SDK version is not pre-loaded to avoid triggering Realm session init on the main thread.
-        // It will be populated lazily when a session is first accessed.
-        SDK_VERSION_STRING = "";
+        // not the first launch
+        if (null != Matrix.getInstance(this).getDefaultSession()) {
+            SDK_VERSION_STRING = Matrix.getInstance(this).getDefaultSession().getVersion(true);
+        } else {
+            SDK_VERSION_STRING = "";
+        }
 
         VectorUncaughtExceptionHandler.INSTANCE.setVersions(VECTOR_VERSION_STRING, SDK_VERSION_STRING);
 
