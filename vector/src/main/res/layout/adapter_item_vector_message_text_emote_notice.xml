@@ -22,7 +22,7 @@
         android:layout_marginRight="16dp"
         android:orientation="horizontal">
 
-        <im.vector.view.VectorCircularImageView
+        <ImageView
             android:id="@+id/messagesAdapter_avatar"
             android:layout_width="40dp"
             android:layout_height="40dp"

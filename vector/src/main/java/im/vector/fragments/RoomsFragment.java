@@ -23,15 +23,14 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.AbsListView;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Filter;
-import android.widget.Spinner;
+import android.widget.ListView;
 import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
-import androidx.recyclerview.widget.DividerItemDecoration;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
 import org.matrix.androidsdk.core.Log;
 import org.matrix.androidsdk.core.callback.ApiCallback;
@@ -52,14 +51,11 @@ import im.vector.R;
 import im.vector.activity.CommonActivityUtils;
 import im.vector.activity.RoomDirectoryPickerActivity;
 import im.vector.activity.VectorRoomActivity;
-import im.vector.adapters.AdapterSection;
 import im.vector.adapters.RoomAdapter;
+import im.vector.adapters.RoomsListAdapter;
 import im.vector.ui.themes.ThemeUtils;
 import im.vector.util.HomeRoomsViewModel;
 import im.vector.util.RoomDirectoryData;
-import im.vector.view.EmptyViewItemDecoration;
-import im.vector.view.SectionView;
-import im.vector.view.SimpleDividerItemDecoration;
 
 public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.OnRoomChangedListener {
     private static final String LOG_TAG = RoomsFragment.class.getSimpleName();
@@ -70,23 +66,42 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
     //
     private static final String SELECTED_ROOM_DIRECTORY = "SELECTED_ROOM_DIRECTORY";
 
-    // dummy spinner to select the public rooms
-    private Spinner mPublicRoomsSelector;
-
     // estimated number of public rooms
     private Integer mEstimatedPublicRoomCount = null;
 
-    @BindView(R.id.recyclerview)
-    RecyclerView mRecycler;
+    @BindView(R.id.listview)
+    ListView mListView;
 
     // rooms management
-    private RoomAdapter mAdapter;
+    private RoomsListAdapter mAdapter;
 
     // the selected room directory
     private RoomDirectoryData mSelectedRoomDirectory;
 
     // rooms list
     private List<Room> mRooms = new ArrayList<>();
+
+    private int mLastVisibleItem = -1;
+
+    private final AbsListView.OnScrollListener mListScrollListener = new AbsListView.OnScrollListener() {
+        @Override
+        public void onScrollStateChanged(AbsListView view, int scrollState) {
+            // no-op
+        }
+
+        @Override
+        public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+            if ((mActivity != null) && visibleItemCount > 0 && totalItemCount > visibleItemCount && firstVisibleItem != mLastVisibleItem) {
+                mActivity.hideFloatingActionButton(getTag());
+            }
+
+            mLastVisibleItem = firstVisibleItem;
+
+            if (mAdapter.getPublicRoomCount() > 0 && (firstVisibleItem + visibleItemCount + 10) >= totalItemCount) {
+                forwardPaginate();
+            }
+        }
+    };
 
     /*
      * *********************************************************************************************
@@ -123,7 +138,9 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
 
         mOnRoomChangedListener = this;
 
-        mAdapter.onFilterDone(mCurrentFilter);
+        if (!TextUtils.isEmpty(mCurrentFilter)) {
+            mAdapter.getFilter().filter(mCurrentFilter);
+        }
 
         if (savedInstanceState != null) {
             mSelectedRoomDirectory = (RoomDirectoryData) savedInstanceState.getSerializable(SELECTED_ROOM_DIRECTORY);
@@ -136,14 +153,15 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
     public void onResume() {
         super.onResume();
         mAdapter.setInvitation(mActivity.getRoomInvitations());
-        mRecycler.addOnScrollListener(mScrollListener);
+        mListView.setOnScrollListener(mListScrollListener);
+        focusFirstRoomRow();
     }
 
     @Override
     public void onPause() {
         super.onPause();
         mEstimatedPublicRoomCount = null;
-        mRecycler.removeOnScrollListener(mScrollListener);
+        mListView.setOnScrollListener(null);
     }
 
     @Override
@@ -206,6 +224,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             mRooms = result.getOtherRoomsWithFavorites();
             mAdapter.setRooms(mRooms);
             mAdapter.setInvitation(mActivity.getRoomInvitations());
+            focusFirstRoomRow();
         }
     }
 
@@ -216,13 +235,15 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
      */
 
     private void initViews() {
-        int margin = (int) getResources().getDimension(R.dimen.item_decoration_left_margin);
-        mRecycler.setLayoutManager(new LinearLayoutManager(getActivity(), RecyclerView.VERTICAL, false));
-        mRecycler.setHasFixedSize(true);
-        mRecycler.addItemDecoration(new SimpleDividerItemDecoration(getActivity(), DividerItemDecoration.VERTICAL, margin));
-        mRecycler.addItemDecoration(new EmptyViewItemDecoration(getActivity(), DividerItemDecoration.VERTICAL, 40, 16, 14));
+        mListView.setDivider(null);
+        mListView.setDividerHeight(0);
+        mListView.setItemsCanFocus(false);
+        mListView.setScrollingCacheEnabled(false);
+        mListView.setFocusable(true);
+        mListView.setFocusableInTouchMode(true);
+        mListView.setSelector(R.drawable.bb_holo_list_selector);
 
-        mAdapter = new RoomAdapter(getActivity(), new RoomAdapter.OnSelectItemListener() {
+        mAdapter = new RoomsListAdapter(getActivity(), mSession, new RoomAdapter.OnSelectItemListener() {
             @Override
             public void onSelectItem(Room room, int position) {
                 openRoom(room);
@@ -233,12 +254,45 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
                 onPublicRoomSelected(publicRoom);
             }
         }, this, this);
-        mRecycler.setAdapter(mAdapter);
+        mListView.setAdapter(mAdapter);
+        mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                mListView.setItemChecked(position, true);
 
-        View spinner = mAdapter.findSectionSubViewById(R.id.public_rooms_selector);
-        if (spinner != null && spinner instanceof Spinner) {
-            mPublicRoomsSelector = (Spinner) spinner;
+                Object item = mAdapter.getItem(position);
+                if (item instanceof Room) {
+                    Room room = (Room) item;
+                    if (room.isInvited()) {
+                        onPreviewRoom(mSession, room.getRoomId());
+                    } else {
+                        openRoom(room);
+                    }
+                } else if (item instanceof PublicRoom) {
+                    onPublicRoomSelected((PublicRoom) item);
+                }
+            }
+        });
+    }
+
+    private void focusFirstRoomRow() {
+        if (mListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            return;
         }
+
+        final int firstSelectablePosition = mAdapter.getFirstSelectablePosition();
+        if (firstSelectablePosition == ListView.INVALID_POSITION) {
+            return;
+        }
+
+        mListView.post(new Runnable() {
+            @Override
+            public void run() {
+                mListView.requestFocus();
+                mListView.setSelection(firstSelectablePosition);
+                mListView.setItemChecked(firstSelectablePosition, true);
+            }
+        });
     }
 
     /*
@@ -325,43 +379,6 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
     }
 
     /**
-     * Scroll events listener to forward paginate when it is required.
-     */
-    private final RecyclerView.OnScrollListener mPublicRoomScrollListener = new RecyclerView.OnScrollListener() {
-        @Override
-        public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-            super.onScrolled(recyclerView, dx, dy);
-            LinearLayoutManager layoutManager = (LinearLayoutManager) mRecycler.getLayoutManager();
-            int lastVisibleItemPosition = layoutManager.findLastCompletelyVisibleItemPosition();
-
-            // we load public rooms 20 by 20, when the 10th one becomes visible, starts loading the next 20
-            SectionView sectionView = mAdapter.getSectionViewForSectionIndex(mAdapter.getSectionsCount() - 1);
-            AdapterSection lastSection = sectionView != null ? sectionView.getSection() : null;
-
-            if (null != lastSection) {
-                // detect if the last visible item is inside another section
-                for (int i = 0; i < mAdapter.getSectionsCount() - 1; i++) {
-                    SectionView prevSectionView = mAdapter.getSectionViewForSectionIndex(i);
-
-                    if ((null != prevSectionView) && (null != prevSectionView.getSection())) {
-                        lastVisibleItemPosition -= prevSectionView.getSection().getNbItems();
-
-                        // the item is in a previous section
-                        if (lastVisibleItemPosition <= 0) {
-                            return;
-                        }
-                    }
-                }
-
-                // trigger a forward paginate when there are only 10 items left
-                if ((lastSection.getNbItems() - lastVisibleItemPosition) < 10) {
-                    forwardPaginate();
-                }
-            }
-        }
-    };
-
-    /**
      * Refresh the directory source spinner
      */
     private void refreshDirectorySourceSpinner() {
@@ -376,28 +393,19 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             mRoomDirectoryAdapter.clear();
         }
 
-        if (mPublicRoomsSelector != null) {
-            // reported by GA
-            // https://stackoverflow.com/questions/26752974/adapterdatasetobserver-was-not-registered
-            if (mRoomDirectoryAdapter != mPublicRoomsSelector.getAdapter()) {
-                mPublicRoomsSelector.setAdapter(mRoomDirectoryAdapter);
-            } else {
-                mRoomDirectoryAdapter.notifyDataSetChanged();
-            }
-
-            mPublicRoomsSelector.setOnTouchListener(new View.OnTouchListener() {
-                @Override
-                public boolean onTouch(View v, MotionEvent event) {
-                    if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                        startActivityForResult(RoomDirectoryPickerActivity.getIntent(getActivity(), mSession.getMyUserId()),
-                                DIRECTORY_SOURCE_ACTIVITY_REQUEST_CODE);
-                    }
-                    return true;
-                }
-            });
-        }
-
         mRoomDirectoryAdapter.add(mSelectedRoomDirectory.getDisplayName());
+        mAdapter.setDirectoryAdapter(mRoomDirectoryAdapter);
+        mAdapter.setSelectedDirectoryDisplayName(mSelectedRoomDirectory.getDisplayName());
+        mAdapter.setDirectoryTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    startActivityForResult(RoomDirectoryPickerActivity.getIntent(getActivity(), mSession.getMyUserId()),
+                            DIRECTORY_SOURCE_ACTIVITY_REQUEST_CODE);
+                }
+                return true;
+            }
+        });
     }
 
     @Override
@@ -415,14 +423,14 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
      * Display the public rooms loading view
      */
     private void showPublicRoomsLoadingView() {
-        mAdapter.getSectionViewForSectionIndex(mAdapter.getSectionsCount() - 1).showLoadingView();
+        // No dedicated loading row for the ListView rewrite.
     }
 
     /**
      * Hide the public rooms loading view
      */
     private void hidePublicRoomsLoadingView() {
-        mAdapter.getSectionViewForSectionIndex(mAdapter.getSectionsCount() - 1).hideLoadingView();
+        // No dedicated loading row for the ListView rewrite.
     }
 
     /**
@@ -496,20 +504,13 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
                         if (isAdded()) {
                             mAdapter.setNoMorePublicRooms(publicRooms.size() < PublicRoomsManager.PUBLIC_ROOMS_LIMIT);
                             mAdapter.setPublicRooms(publicRooms);
-                            addPublicRoomsListener();
+                            focusFirstRoomRow();
 
-                            // trick to display the full public rooms list
                             if (displayOnTop) {
-                                // wait that the list is refreshed
-                                mRecycler.post(new Runnable() {
+                                mListView.post(new Runnable() {
                                     @Override
                                     public void run() {
-                                        SectionView publicSectionView = mAdapter.getSectionViewForSectionIndex(mAdapter.getSectionsCount() - 1);
-
-                                        // simulate a click on the header is to display the full list
-                                        if ((null != publicSectionView) && !publicSectionView.isStickyHeader()) {
-                                            publicSectionView.callOnClick();
-                                        }
+                                        mListView.setSelection(mAdapter.getPublicRoomsHeaderPosition());
                                     }
                                 });
                             }
@@ -555,10 +556,8 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             @Override
             public void onSuccess(final List<PublicRoom> publicRooms) {
                 if (isAdded()) {
-                    // unplug the scroll listener if there is no more data to find
                     if (!PublicRoomsManager.getInstance().hasMoreResults()) {
                         mAdapter.setNoMorePublicRooms(true);
-                        removePublicRoomsListener();
                     }
 
                     mAdapter.addPublicRooms(publicRooms);
@@ -596,20 +595,6 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         } else {
             hidePublicRoomsLoadingView();
         }
-    }
-
-    /**
-     * Add the public rooms listener
-     */
-    private void addPublicRoomsListener() {
-        mRecycler.addOnScrollListener(mPublicRoomScrollListener);
-    }
-
-    /**
-     * Remove the public rooms listener
-     */
-    private void removePublicRoomsListener() {
-        mRecycler.removeOnScrollListener(mPublicRoomScrollListener);
     }
 
     /*

@@ -2649,6 +2649,24 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         }
     }
 
+    public void showMessageActionsForPosition(int position, View rowView) {
+        if (mIsSearchMode || position < 0 || position >= getCount() || rowView == null) {
+            return;
+        }
+
+        MessageRow row = getItem(position);
+        Event event = row.getEvent();
+        int msgType = getItemViewType(position);
+        View anchorView = rowView.findViewById(R.id.messagesAdapter_action_anchor);
+
+        if (anchorView == null) {
+            anchorView = rowView;
+        }
+
+        onMessageClick(event, getEventText(rowView, event, msgType), anchorView);
+        onEventTap(event);
+    }
+
     /*
      * *********************************************************************************************
      *  EventGroups events

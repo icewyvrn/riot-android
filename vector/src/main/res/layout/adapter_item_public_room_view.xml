@@ -9,11 +9,12 @@
     android:paddingEnd="16dp"
     android:paddingRight="16dp">
 
-    <im.vector.view.VectorCircularImageView
+    <ImageView
         android:id="@+id/public_room_avatar"
         android:layout_width="@dimen/chat_avatar_size"
         android:layout_height="@dimen/chat_avatar_size"
         android:layout_centerVertical="true"
+        android:scaleType="centerCrop"
         tools:src="@tools:sample/avatars" />
 
     <RelativeLayout

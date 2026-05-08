@@ -269,7 +269,7 @@
             android:layout_alignParentBottom="true"
             android:background="?android:attr/colorBackground">
 
-            <im.vector.view.VectorCircularImageView
+            <ImageView
                 android:id="@+id/room_self_avatar"
                 android:layout_width="40dp"
                 android:layout_height="40dp"

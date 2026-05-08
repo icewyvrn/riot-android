@@ -326,6 +326,7 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
         sharedInstance = this;
 
         setupNavigation();
+        configureRoomsOnlyMode();
 
         initSlidingMenu();
 
@@ -542,14 +543,10 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
             }
         }
 
-        final View selectedMenu;
-        if (isFirstCreation()) {
-            selectedMenu = mBottomNavigationView.findViewById(R.id.bottom_action_home);
-        } else {
-            selectedMenu = mBottomNavigationView.findViewById(getSavedInstanceState().getInt(CURRENT_MENU_ID, R.id.bottom_action_home));
-        }
-        if (selectedMenu != null) {
-            selectedMenu.performClick();
+        MenuItem selectedMenuItem = mBottomNavigationView.getMenu().findItem(R.id.bottom_action_rooms);
+        if (selectedMenuItem != null) {
+            selectedMenuItem.setChecked(true);
+            updateSelectedFragment(selectedMenuItem);
         }
 
         // initialize the public rooms list
@@ -927,6 +924,17 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
                 return true;
             }
         });
+    }
+
+    private void configureRoomsOnlyMode() {
+        Menu menu = mBottomNavigationView.getMenu();
+        for (int index = 0; index < menu.size(); index++) {
+            MenuItem item = menu.getItem(index);
+            boolean isRoomsTab = item.getItemId() == R.id.bottom_action_rooms;
+            item.setEnabled(isRoomsTab);
+            item.setVisible(isRoomsTab);
+        }
+        mBottomNavigationView.setVisibility(View.GONE);
     }
 
     /**

@@ -25,10 +25,12 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.widget.AdapterView;
 import android.widget.EditText;
 import android.widget.ListView;
@@ -111,6 +113,17 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
     private EncryptedFileInfo mPendingEncryptedFileInfo;
 
     private static int VERIF_REQ_CODE = 12;
+
+    private boolean mTrackpadLongPressHandled;
+    private final Runnable mTrackpadLongPressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mMessageListView != null && mMessageListView.hasFocus() && !mTrackpadLongPressHandled) {
+                mTrackpadLongPressHandled = true;
+                showSelectedMessageMenu();
+            }
+        }
+    };
 
     public interface VectorMessageListFragmentListener {
         /**
@@ -213,7 +226,42 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         mMessageListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                mMessageListView.setItemChecked(position, true);
                 onRowClick(position);
+            }
+        });
+
+        mMessageListView.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+        mMessageListView.setItemsCanFocus(false);
+        mMessageListView.setFocusable(true);
+        mMessageListView.setFocusableInTouchMode(true);
+        mMessageListView.setSelector(R.drawable.bb_holo_list_selector);
+        mMessageListView.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (!isTrackpadCenterKey(keyCode)) {
+                    return false;
+                }
+
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getRepeatCount() == 0) {
+                        mTrackpadLongPressHandled = false;
+                        mMessageListView.removeCallbacks(mTrackpadLongPressRunnable);
+                        mMessageListView.postDelayed(mTrackpadLongPressRunnable, ViewConfiguration.getLongPressTimeout());
+                    }
+                    return true;
+                }
+
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    mMessageListView.removeCallbacks(mTrackpadLongPressRunnable);
+                    if (!mTrackpadLongPressHandled) {
+                        selectHighlightedMessage();
+                    }
+                    mTrackpadLongPressHandled = false;
+                    return true;
+                }
+
+                return true;
             }
         });
 
@@ -253,6 +301,11 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
     @Override
     public void onPause() {
         super.onPause();
+
+        if (mMessageListView != null) {
+            mMessageListView.removeCallbacks(mTrackpadLongPressRunnable);
+        }
+        mTrackpadLongPressHandled = false;
 
         mAdapter.setVectorMessagesAdapterActionsListener(null);
         mAdapter.onPause();
@@ -1039,7 +1092,9 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
     }
 
     public boolean onRowLongClick(int position) {
-        return false;
+        mMessageListView.setItemChecked(position, true);
+        showMessageMenu(position);
+        return true;
     }
 
     /**
@@ -1121,10 +1176,73 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
             MessageRow row = mAdapter.getItem(position);
             Event event = row.getEvent();
 
-            // toggle selection mode
             mAdapter.onEventTap(event);
         } catch (Exception e) {
             Log.e(LOG_TAG, "## onRowClick() failed " + e.getMessage(), e);
+        }
+    }
+
+    private boolean isTrackpadCenterKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER;
+    }
+
+    private int getHighlightedMessagePosition() {
+        int position = mMessageListView.getSelectedItemPosition();
+        if (position != ListView.INVALID_POSITION) {
+            return position;
+        }
+
+        position = mMessageListView.getCheckedItemPosition();
+        if (position != ListView.INVALID_POSITION) {
+            return position;
+        }
+
+        return ListView.INVALID_POSITION;
+    }
+
+    private void selectHighlightedMessage() {
+        int position = getHighlightedMessagePosition();
+        if (position == ListView.INVALID_POSITION) {
+            return;
+        }
+
+        try {
+            MessageRow row = mAdapter.getItem(position);
+            Event event = row.getEvent();
+            Event selectedEvent = mAdapter.getCurrentSelectedEvent();
+            if (selectedEvent == null || !TextUtils.equals(selectedEvent.eventId, event.eventId)) {
+                mAdapter.onEventTap(event);
+            }
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "## selectHighlightedMessage() failed " + e.getMessage(), e);
+        }
+    }
+
+    private void showSelectedMessageMenu() {
+        int position = getHighlightedMessagePosition();
+        if (position != ListView.INVALID_POSITION) {
+            showMessageMenu(position);
+        }
+    }
+
+    private void showMessageMenu(int position) {
+        try {
+            View anchorView = mMessageListView.getSelectedView();
+            if (anchorView == null) {
+                int childIndex = position - mMessageListView.getFirstVisiblePosition();
+                if (childIndex >= 0 && childIndex < mMessageListView.getChildCount()) {
+                    anchorView = mMessageListView.getChildAt(childIndex);
+                }
+            }
+            if (anchorView == null) {
+                anchorView = mMessageListView;
+            }
+
+            mAdapter.showMessageActionsForPosition(position, anchorView);
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "## showMessageMenu() failed " + e.getMessage(), e);
         }
     }
 

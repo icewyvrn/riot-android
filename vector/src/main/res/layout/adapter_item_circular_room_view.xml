@@ -8,7 +8,7 @@
     android:paddingBottom="10dp"
     tools:background="#22ff0000">
 
-    <im.vector.view.VectorCircularImageView
+    <ImageView
         android:id="@+id/room_avatar"
         android:layout_width="50dp"
         android:layout_height="50dp"
