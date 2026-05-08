@@ -19,6 +19,7 @@ package im.vector.util;
 
 import android.annotation.SuppressLint;
 import android.content.ClipData;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -76,6 +77,8 @@ import im.vector.adapters.ParticipantAdapterItem;
 import im.vector.settings.VectorLocale;
 
 public class VectorUtils {
+
+    private static final int AVATAR_CACHE_SIZE_BYTES = 5 * 1024 * 1024;
 
     private static final String LOG_TAG = VectorUtils.class.getSimpleName();
 
@@ -144,7 +147,12 @@ public class VectorUtils {
     //==============================================================================================================
 
     // avatars cache
-    static final private LruCache<String, Bitmap> mAvatarImageByKeyDict = new LruCache<>(5 * 1024 * 1024);
+    static final private LruCache<String, Bitmap> mAvatarImageByKeyDict = new LruCache<String, Bitmap>(AVATAR_CACHE_SIZE_BYTES) {
+        @Override
+        protected int sizeOf(String key, Bitmap value) {
+            return value.getRowBytes() * value.getHeight();
+        }
+    };
     // the avatars background color
     static final private List<Integer> mColorList = new ArrayList<>();
 
@@ -200,7 +208,7 @@ public class VectorUtils {
      * @return the generated bitmap
      */
     private static Bitmap createAvatar(int backgroundColor, String text, int pixelsSide) {
-        Bitmap.Config bitmapConfig = Bitmap.Config.ARGB_8888;
+        Bitmap.Config bitmapConfig = Bitmap.Config.RGB_565;
 
         Bitmap bitmap = Bitmap.createBitmap(pixelsSide, pixelsSide, bitmapConfig);
         Canvas canvas = new Canvas(bitmap);
@@ -293,6 +301,14 @@ public class VectorUtils {
         }
 
         return thumbnail;
+    }
+
+    public static void trimAvatarCache(int level) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            mAvatarImageByKeyDict.evictAll();
+        } else if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            mAvatarImageByKeyDict.trimToSize(AVATAR_CACHE_SIZE_BYTES / 2);
+        }
     }
 
     /**

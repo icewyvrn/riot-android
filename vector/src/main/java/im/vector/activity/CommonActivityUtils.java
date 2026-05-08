@@ -90,6 +90,7 @@ import im.vector.listeners.YesNoListener;
 import im.vector.services.EventStreamServiceX;
 import im.vector.ui.badge.BadgeProxy;
 import im.vector.util.PreferencesManager;
+import im.vector.util.VectorUtils;
 
 /**
  * Contains useful functions which are called in multiple activities.
@@ -1185,6 +1186,8 @@ public class CommonActivityUtils {
             Log.e(LOW_MEMORY_LOG_TAG, "background application : onLowMemory ");
         }
 
+        Glide.get(activity).clearMemory();
+        VectorUtils.trimAvatarCache(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW);
         displayMemoryInformation(activity, "onLowMemory global");
     }
 
@@ -1198,6 +1201,7 @@ public class CommonActivityUtils {
         String activityName = (null != activity) ? activity.getClass().getSimpleName() : "NotAvailable";
         Log.e(LOW_MEMORY_LOG_TAG, "Active application : onTrimMemory from " + activityName + " level=" + level);
         Glide.get(activity).trimMemory(level);
+        VectorUtils.trimAvatarCache(level);
 
         displayMemoryInformation(activity, "onTrimMemory");
     }
