@@ -126,7 +126,38 @@ public class RoomsListAdapter extends BaseAdapter implements Filterable {
 
     @Override
     public long getItemId(int position) {
-        return position;
+        ItemDescriptor descriptor = resolvePosition(position);
+        if (descriptor == null) {
+            return position;
+        }
+
+        switch (descriptor.viewType) {
+            case VIEW_TYPE_INVITE:
+            case VIEW_TYPE_ROOM:
+                return mFilteredRooms.contains(getItem(position)) || mFilteredInvitations.contains(getItem(position))
+                        ? ((Room) getItem(position)).getRoomId().hashCode()
+                        : position;
+            case VIEW_TYPE_PUBLIC_ROOM:
+                PublicRoom publicRoom = mPublicRooms.get(descriptor.indexInSection);
+                if (!TextUtils.isEmpty(publicRoom.roomId)) {
+                    return publicRoom.roomId.hashCode();
+                }
+                if (!TextUtils.isEmpty(publicRoom.canonicalAlias)) {
+                    return publicRoom.canonicalAlias.hashCode();
+                }
+                return ("public:" + descriptor.indexInSection).hashCode();
+            case VIEW_TYPE_HEADER:
+                return ("header:" + descriptor.sectionTitle).hashCode();
+            case VIEW_TYPE_PUBLIC_HEADER:
+                return "public_header".hashCode();
+            default:
+                return position;
+        }
+    }
+
+    @Override
+    public boolean hasStableIds() {
+        return true;
     }
 
     @Override

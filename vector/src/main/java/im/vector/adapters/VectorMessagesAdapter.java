@@ -149,6 +149,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
     // debounce rapid-fire notifyDataSetChanged() calls (image downloads, member updates, etc.)
     private boolean mRefreshPending = false;
     private final Handler mRefreshHandler = new Handler(Looper.getMainLooper());
+    private boolean mRenderedBodyCacheDirty = true;
+    private boolean mMessageDateListDirty = true;
 
     // define the e2e icon to use for a dedicated eventId
     // can be a drawable or
@@ -365,14 +367,25 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
 
         int screenWidth = size.x;
         int screenHeight = size.y;
+        boolean isDataSaveModeEnabled = PreferencesManager.useDataSaveMode(VectorApp.getInstance());
 
         // landscape / portrait
         if (screenWidth < screenHeight) {
-            mMaxImageWidth = Math.round(screenWidth * 0.6f);
-            mMaxImageHeight = Math.round(screenHeight * 0.4f);
+            if (isDataSaveModeEnabled) {
+                mMaxImageWidth = Math.round(screenWidth * 0.45f);
+                mMaxImageHeight = Math.round(screenHeight * 0.28f);
+            } else {
+                mMaxImageWidth = Math.round(screenWidth * 0.6f);
+                mMaxImageHeight = Math.round(screenHeight * 0.4f);
+            }
         } else {
-            mMaxImageWidth = Math.round(screenWidth * 0.4f);
-            mMaxImageHeight = Math.round(screenHeight * 0.6f);
+            if (isDataSaveModeEnabled) {
+                mMaxImageWidth = Math.round(screenWidth * 0.3f);
+                mMaxImageHeight = Math.round(screenHeight * 0.45f);
+            } else {
+                mMaxImageWidth = Math.round(screenWidth * 0.4f);
+                mMaxImageHeight = Math.round(screenHeight * 0.6f);
+            }
         }
 
         mSession = session;
@@ -484,6 +497,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
             if (row.getEvent().eventId != null) {
                 mEventRowMap.put(row.getEvent().eventId, row);
             }
+
+            markTimelineCachesDirty();
         }
     }
 
@@ -503,6 +518,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
 
                 // check merge
                 checkEventGroupsMerge(row, position);
+
+                markTimelineCachesDirty();
             }
         }
     }
@@ -529,6 +546,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
             if (row.getEvent().eventId != null) {
                 mEventRowMap.put(row.getEvent().eventId, row);
             }
+
+            markTimelineCachesDirty();
 
             if ((!mIsSearchMode) && refresh) {
                 notifyDataSetChanged();
@@ -636,6 +655,7 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
             removeEventById(oldEventId);
         }
 
+        markTimelineCachesDirty();
         notifyDataSetChanged();
     }
 
@@ -684,6 +704,7 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         if (!TextUtils.equals(pattern, mPattern)) {
             mPattern = pattern;
             mIsSearchMode = !TextUtils.isEmpty(mPattern);
+            markTimelineCachesDirty();
 
             // in search mode, the live row are cached.
             if (mIsSearchMode) {
@@ -721,6 +742,8 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         if (!mIsSearchMode) {
             mEventRowMap.clear();
         }
+
+        markTimelineCachesDirty();
     }
 
     @Override
@@ -836,6 +859,7 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         // undelivered events must be pushed at the end of the history
         setNotifyOnChange(false);
         List<MessageRow> undeliverableEvents = new ArrayList<>();
+        boolean timelineStructureChanged = mMessageDateListDirty;
 
         for (int i = 0; i < getCount(); i++) {
             MessageRow row = getItem(i);
@@ -849,6 +873,7 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         }
 
         if (undeliverableEvents.size() > 0) {
+            timelineStructureChanged = true;
             try {
                 Collections.sort(undeliverableEvents, new Comparator<MessageRow>() {
                     @Override
@@ -866,11 +891,15 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
 
         setNotifyOnChange(true);
 
-        // invalidate cached rendered bodies — text color/highlights may have changed
-        mRenderedBodyMap.clear();
+        if (mRenderedBodyCacheDirty) {
+            mRenderedBodyMap.clear();
+            mRenderedBodyCacheDirty = false;
+        }
 
-        // build event -> date list
-        refreshRefreshDateList();
+        if (timelineStructureChanged) {
+            refreshRefreshDateList();
+            mMessageDateListDirty = false;
+        }
 
         manageCryptoEvents();
 
@@ -914,6 +943,13 @@ public class VectorMessagesAdapter extends AbstractMessagesAdapter {
         mRefreshPending = false;
         mEventFormattedTsMap.clear();
         mRenderedBodyMap.clear();
+        mRenderedBodyCacheDirty = true;
+        mMessageDateListDirty = true;
+    }
+
+    private void markTimelineCachesDirty() {
+        mRenderedBodyCacheDirty = true;
+        mMessageDateListDirty = true;
     }
 
     /**

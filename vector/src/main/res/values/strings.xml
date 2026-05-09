@@ -1408,6 +1408,8 @@ Why choose Riot.im?
     <string name="keys_backup_restoring_downloading_backup_waiting_message">Downloading keys…</string>
     <string name="keys_backup_restoring_importing_keys_waiting_message">Importing keys…</string>
     <string name="keys_backup_unlock_button">Unlock History</string>
+    <string name="conversation_load_older_messages">Load older messages</string>
+    <string name="conversation_loading_older_messages">Loading older messages...</string>
     <string name="keys_backup_recovery_code_empty_error_message">Please enter a recovery key</string>
     <string name="keys_backup_recovery_code_error_decrypt">Backup could not be decrypted with this recovery key: please verify that you entered the correct recovery key.</string>
 

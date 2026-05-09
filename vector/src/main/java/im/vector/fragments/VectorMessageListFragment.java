@@ -24,6 +24,8 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -31,8 +33,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewConfiguration;
+import android.view.Gravity;
 import android.widget.AdapterView;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -73,6 +77,8 @@ import org.matrix.androidsdk.rest.model.message.Message;
 import org.matrix.androidsdk.rest.model.message.VideoMessage;
 
 import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -113,14 +119,32 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
     private EncryptedFileInfo mPendingEncryptedFileInfo;
 
     private static int VERIF_REQ_CODE = 12;
+    private static final long BACK_PAGINATION_SPINNER_DELAY_MS = 150L;
 
     private boolean mTrackpadLongPressHandled;
+    private final Handler mBackPaginationUiHandler = new Handler(Looper.getMainLooper());
+    private boolean mBackPaginationSpinnerPending;
+    private boolean mAllowNextManualBackPaginate;
+    private boolean mManualBackPaginateInProgress;
+    private boolean mLoadMoreButtonEnteredFromMessageList;
+    private String mPendingManualBackPaginateAnchorEventId;
+    private TextView mLoadMoreButtonView;
     private final Runnable mTrackpadLongPressRunnable = new Runnable() {
         @Override
         public void run() {
             if (mMessageListView != null && mMessageListView.hasFocus() && !mTrackpadLongPressHandled) {
                 mTrackpadLongPressHandled = true;
                 showSelectedMessageMenu();
+            }
+        }
+    };
+
+    private final Runnable mShowBackPaginationSpinnerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            mBackPaginationSpinnerPending = false;
+            if (mListener != null && isAdded()) {
+                mListener.showPreviousEventsLoadingWheel();
             }
         }
     };
@@ -205,7 +229,7 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         Log.d(LOG_TAG, "onCreateView");
 
-        View v = super.onCreateView(inflater, container, savedInstanceState);
+        View contentView = super.onCreateView(inflater, container, savedInstanceState);
 
         Bundle args = getArguments();
 
@@ -223,6 +247,34 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
             mAdapter.setImageGetter(mVectorImageGetter);
         }
 
+        FrameLayout wrappedRoot = new FrameLayout(getActivity());
+        wrappedRoot.addView(contentView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        mLoadMoreButtonView = createLoadMoreButton();
+        wrappedRoot.addView(mLoadMoreButtonView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP
+        ));
+
+        mLoadMoreButtonView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (mMessageListView != null && mLoadMoreButtonView != null) {
+                    mMessageListView.setPadding(
+                            mMessageListView.getPaddingLeft(),
+                            mMessageListView.getPaddingTop() + mLoadMoreButtonView.getHeight(),
+                            mMessageListView.getPaddingRight(),
+                            mMessageListView.getPaddingBottom()
+                    );
+                    mMessageListView.setClipToPadding(false);
+                }
+            }
+        });
+
         mMessageListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
@@ -239,6 +291,21 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         mMessageListView.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN
+                        && isTrackpadNavigationKey(keyCode)
+                        && highlightLatestMessageIfNeeded()) {
+                    if (!isTrackpadCenterKey(keyCode)) {
+                        return true;
+                    }
+                }
+
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    if (event.getAction() == KeyEvent.ACTION_DOWN && shouldFocusLoadMoreButton()) {
+                        focusLoadMoreButton();
+                    }
+                    return shouldFocusLoadMoreButton();
+                }
+
                 if (!isTrackpadCenterKey(keyCode)) {
                     return false;
                 }
@@ -271,9 +338,9 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         mMessageListView.setScrollingCacheEnabled(false);
         mMessageListView.setAnimationCacheEnabled(false);
 
-        v.setBackgroundColor(ThemeUtils.INSTANCE.getColor(getActivity(), android.R.attr.colorBackground));
+        contentView.setBackgroundColor(ThemeUtils.INSTANCE.getColor(getActivity(), android.R.attr.colorBackground));
 
-        return v;
+        return wrappedRoot;
     }
 
     @Override
@@ -305,6 +372,8 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         if (mMessageListView != null) {
             mMessageListView.removeCallbacks(mTrackpadLongPressRunnable);
         }
+        mBackPaginationUiHandler.removeCallbacks(mShowBackPaginationSpinnerRunnable);
+        mBackPaginationSpinnerPending = false;
         mTrackpadLongPressHandled = false;
 
         mAdapter.setVectorMessagesAdapterActionsListener(null);
@@ -319,6 +388,8 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         super.onResume();
 
         mAdapter.setVectorMessagesAdapterActionsListener(this);
+        refreshLoadMoreButtonVisibility();
+        ensureLatestMessageHighlighted();
 
         mVectorImageGetter.setListener(new VectorImageGetter.OnImageDownloadListener() {
             @Override
@@ -1051,15 +1122,30 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
 
     @Override
     public void showLoadingBackProgress() {
-        if (mListener != null && isAdded()) {
-            mListener.showPreviousEventsLoadingWheel();
+        if (mListener != null && isAdded() && !mBackPaginationSpinnerPending) {
+            mBackPaginationSpinnerPending = true;
+            mBackPaginationUiHandler.postDelayed(mShowBackPaginationSpinnerRunnable, BACK_PAGINATION_SPINNER_DELAY_MS);
         }
+
+        updateLoadMoreButtonState(false, R.string.conversation_loading_older_messages);
     }
 
     @Override
     public void hideLoadingBackProgress() {
+        if (mBackPaginationSpinnerPending) {
+            mBackPaginationUiHandler.removeCallbacks(mShowBackPaginationSpinnerRunnable);
+            mBackPaginationSpinnerPending = false;
+        }
+
         if (mListener != null && isAdded()) {
             mListener.hidePreviousEventsLoadingWheel();
+        }
+
+        mManualBackPaginateInProgress = false;
+        restoreManualBackPaginateAnchor();
+        refreshLoadMoreButtonVisibility();
+        if (canManualBackPaginate()) {
+            updateLoadMoreButtonState(true, R.string.conversation_load_older_messages);
         }
     }
 
@@ -1089,12 +1175,244 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         if (mListener != null && isAdded()) {
             mListener.hideMainLoadingWheel();
         }
+
+        refreshLoadMoreButtonVisibility();
+        ensureLatestMessageHighlighted();
     }
 
     public boolean onRowLongClick(int position) {
         mMessageListView.setItemChecked(position, true);
         showMessageMenu(position);
         return true;
+    }
+
+    private TextView createLoadMoreButton() {
+        TextView buttonView = new TextView(getActivity());
+        int horizontalPadding = Math.round(getResources().getDisplayMetrics().density * 16);
+        int verticalPadding = Math.round(getResources().getDisplayMetrics().density * 12);
+        buttonView.setGravity(Gravity.CENTER);
+        buttonView.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding);
+        buttonView.setText(R.string.conversation_load_older_messages);
+        buttonView.setTextColor(ThemeUtils.INSTANCE.getColor(getActivity(), R.attr.colorAccent));
+        buttonView.setBackgroundResource(R.drawable.bb_holo_list_selector);
+        buttonView.setFocusable(true);
+        buttonView.setFocusableInTouchMode(true);
+        buttonView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                captureManualBackPaginateAnchor();
+                updateLoadMoreButtonState(false, R.string.conversation_loading_older_messages);
+                mAllowNextManualBackPaginate = true;
+                backPaginate(false);
+            }
+        });
+        buttonView.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                        if (mLoadMoreButtonEnteredFromMessageList) {
+                            focusFirstMessageRow();
+                        } else {
+                            focusLatestMessageRow();
+                        }
+                        mLoadMoreButtonEnteredFromMessageList = false;
+                    }
+                    return true;
+                }
+
+                if (!isTrackpadCenterKey(keyCode)) {
+                    return false;
+                }
+
+                return false;
+            }
+        });
+        return buttonView;
+    }
+
+    private void updateLoadMoreButtonState(boolean enabled, int textResId) {
+        if (mLoadMoreButtonView == null) {
+            return;
+        }
+
+        mLoadMoreButtonView.setEnabled(enabled);
+        mLoadMoreButtonView.setClickable(enabled);
+        mLoadMoreButtonView.setText(textResId);
+        mLoadMoreButtonView.setAlpha(enabled ? 1.0f : 0.6f);
+    }
+
+    private void refreshLoadMoreButtonVisibility() {
+        if (mLoadMoreButtonView == null) {
+            return;
+        }
+
+        boolean visible = canManualBackPaginate();
+        mLoadMoreButtonView.setVisibility(visible ? View.VISIBLE : View.GONE);
+
+        if (!visible && mLoadMoreButtonView.hasFocus()) {
+            mLoadMoreButtonEnteredFromMessageList = false;
+            focusFirstMessageRow();
+        }
+    }
+
+    private void captureManualBackPaginateAnchor() {
+        if (mMessageListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            mPendingManualBackPaginateAnchorEventId = null;
+            return;
+        }
+
+        int anchorPosition = mMessageListView.getFirstVisiblePosition();
+        if (anchorPosition < 0 || anchorPosition >= mAdapter.getCount()) {
+            mPendingManualBackPaginateAnchorEventId = null;
+            return;
+        }
+
+        try {
+            MessageRow anchorRow = mAdapter.getItem(anchorPosition);
+            Event anchorEvent = anchorRow != null ? anchorRow.getEvent() : null;
+            mPendingManualBackPaginateAnchorEventId = anchorEvent != null ? anchorEvent.eventId : null;
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Unable to capture manual back pagination anchor", e);
+            mPendingManualBackPaginateAnchorEventId = null;
+        }
+    }
+
+    private void restoreManualBackPaginateAnchor() {
+        if (mMessageListView == null || mAdapter == null || TextUtils.isEmpty(mPendingManualBackPaginateAnchorEventId)) {
+            mPendingManualBackPaginateAnchorEventId = null;
+            return;
+        }
+
+        final MessageRow anchorRow = mAdapter.getMessageRow(mPendingManualBackPaginateAnchorEventId);
+        final int anchorPosition = anchorRow != null ? mAdapter.getPosition(anchorRow) : ListView.INVALID_POSITION;
+        mPendingManualBackPaginateAnchorEventId = null;
+
+        if (anchorPosition == ListView.INVALID_POSITION) {
+            return;
+        }
+
+        mMessageListView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (mMessageListView == null || mAdapter == null || anchorPosition >= mAdapter.getCount()) {
+                    return;
+                }
+
+                mMessageListView.requestFocus();
+                mMessageListView.setSelection(anchorPosition);
+                mMessageListView.setItemChecked(anchorPosition, true);
+            }
+        });
+    }
+
+    private void ensureLatestMessageHighlighted() {
+        if (mMessageListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            return;
+        }
+
+        if (getHighlightedMessagePosition() != ListView.INVALID_POSITION || mLoadMoreButtonView != null && mLoadMoreButtonView.hasFocus()) {
+            return;
+        }
+
+        final int latestPosition = mAdapter.getCount() - 1;
+        mMessageListView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (mMessageListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+                    return;
+                }
+
+                if (getHighlightedMessagePosition() != ListView.INVALID_POSITION || mLoadMoreButtonView != null && mLoadMoreButtonView.hasFocus()) {
+                    return;
+                }
+
+                int boundedLatestPosition = Math.min(latestPosition, mAdapter.getCount() - 1);
+                mMessageListView.requestFocus();
+                mMessageListView.setSelection(boundedLatestPosition);
+                mMessageListView.setItemChecked(boundedLatestPosition, true);
+            }
+        });
+    }
+
+    private boolean canManualBackPaginate() {
+        try {
+            Field matrixMessagesFragmentField = MatrixMessageListFragment.class.getDeclaredField("mMatrixMessagesFragment");
+            matrixMessagesFragmentField.setAccessible(true);
+            Object matrixMessagesFragment = matrixMessagesFragmentField.get(this);
+
+            if (matrixMessagesFragment == null) {
+                return true;
+            }
+
+            Method canBackPaginateMethod = matrixMessagesFragment.getClass().getMethod("canBackPaginate");
+            Object result = canBackPaginateMethod.invoke(matrixMessagesFragment);
+            return !(result instanceof Boolean) || (Boolean) result;
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Unable to read back pagination state", e);
+            return true;
+        }
+    }
+
+    @Override
+    public void backPaginate(boolean fillHistory) {
+        if (!mAllowNextManualBackPaginate && !mManualBackPaginateInProgress) {
+            Log.d(LOG_TAG, "Ignore automatic back pagination request");
+            return;
+        }
+
+        boolean allowNextManualBackPaginate = mAllowNextManualBackPaginate;
+        mAllowNextManualBackPaginate = false;
+
+        super.backPaginate(fillHistory);
+
+        if (allowNextManualBackPaginate) {
+            mManualBackPaginateInProgress = mIsBackPaginating;
+
+            if (!mManualBackPaginateInProgress) {
+                refreshLoadMoreButtonVisibility();
+                if (canManualBackPaginate()) {
+                    updateLoadMoreButtonState(true, R.string.conversation_load_older_messages);
+                }
+            }
+        }
+    }
+
+    private boolean shouldFocusLoadMoreButton() {
+        return mLoadMoreButtonView != null
+                && mLoadMoreButtonView.isEnabled()
+                && mMessageListView != null
+                && mMessageListView.hasFocus()
+                && mMessageListView.getFirstVisiblePosition() == 0
+                && getHighlightedMessagePosition() == 0;
+    }
+
+    private void focusLoadMoreButton() {
+        if (mLoadMoreButtonView != null) {
+            mLoadMoreButtonEnteredFromMessageList = true;
+            mLoadMoreButtonView.requestFocus();
+        }
+    }
+
+    private void focusFirstMessageRow() {
+        if (mMessageListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            return;
+        }
+
+        mMessageListView.requestFocus();
+        mMessageListView.setSelection(0);
+        mMessageListView.setItemChecked(0, true);
+    }
+
+    private void focusLatestMessageRow() {
+        if (mMessageListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            return;
+        }
+
+        int latestPosition = mAdapter.getCount() - 1;
+        mMessageListView.requestFocus();
+        mMessageListView.setSelection(latestPosition);
+        mMessageListView.setItemChecked(latestPosition, true);
     }
 
     /**
@@ -1186,6 +1504,28 @@ public class VectorMessageListFragment extends MatrixMessageListFragment<VectorM
         return keyCode == KeyEvent.KEYCODE_DPAD_CENTER
                 || keyCode == KeyEvent.KEYCODE_ENTER
                 || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER;
+    }
+
+    private boolean isTrackpadNavigationKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || isTrackpadCenterKey(keyCode);
+    }
+
+    private boolean highlightLatestMessageIfNeeded() {
+        if (mMessageListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            return false;
+        }
+
+        if (getHighlightedMessagePosition() != ListView.INVALID_POSITION
+                || mLoadMoreButtonView != null && mLoadMoreButtonView.hasFocus()) {
+            return false;
+        }
+
+        focusLatestMessageRow();
+        return true;
     }
 
     private int getHighlightedMessagePosition() {

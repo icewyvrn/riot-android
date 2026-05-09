@@ -113,6 +113,8 @@ public class VectorApp extends MultiDexApplication {
      */
     private static Activity mCurrentActivity = null;
 
+    private static boolean sResetRoomsListOnNextResume = true;
+
     /**
      * Background application detection
      */
@@ -642,6 +644,12 @@ public class VectorApp extends MultiDexApplication {
      */
     public static boolean isAppInBackground() {
         return (null == mCurrentActivity) && (null != getInstance()) && getInstance().mIsInBackground;
+    }
+
+    public static boolean consumeRoomsListResetOnNextResume() {
+        boolean shouldReset = sResetRoomsListOnNextResume;
+        sResetRoomsListOnNextResume = false;
+        return shouldReset;
     }
 
     /**

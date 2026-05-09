@@ -81,6 +81,7 @@ import im.vector.listeners.IMessagesAdapterActionsListener;
 import im.vector.settings.VectorLocale;
 import im.vector.ui.themes.ThemeUtils;
 import im.vector.util.MatrixLinkMovementMethod;
+import im.vector.util.PreferencesManager;
 import im.vector.util.MatrixURLSpan;
 import im.vector.util.RiotEventDisplay;
 import im.vector.util.VectorImageGetter;
@@ -1212,6 +1213,13 @@ class VectorMessagesAdapterHelper {
 
         // sanity checks
         if (null == urlsPreviewLayout) {
+            return;
+        }
+
+        if (PreferencesManager.useDataSaveMode(mContext)) {
+            urlsPreviewLayout.setVisibility(View.GONE);
+            urlsPreviewLayout.removeAllViews();
+            urlsPreviewLayout.setTag(null);
             return;
         }
 

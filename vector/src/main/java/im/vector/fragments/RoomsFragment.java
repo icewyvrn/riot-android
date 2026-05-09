@@ -84,15 +84,15 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
 
     // rooms list
     private List<Room> mRooms = new ArrayList<>();
+    private final List<Room> mPendingRooms = new ArrayList<>();
     private boolean mHasInitializedPublicRooms;
 
     private int mLastVisibleItem = -1;
-    private final Runnable mInitialPublicRoomsRunnable = new Runnable() {
+
+    private final Runnable mApplyRoomUpdatesRunnable = new Runnable() {
         @Override
         public void run() {
-            if (isAdded() && !mHasInitializedPublicRooms) {
-                initPublicRooms(false);
-            }
+            applyPendingRoomUpdate();
         }
     };
 
@@ -109,6 +109,8 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             }
 
             mLastVisibleItem = firstVisibleItem;
+
+            maybeInitPublicRooms(firstVisibleItem, visibleItemCount);
 
             if (mAdapter.getPublicRoomCount() > 0 && (firstVisibleItem + visibleItemCount + 10) >= totalItemCount) {
                 forwardPaginate();
@@ -160,7 +162,6 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         }
 
         refreshDirectorySourceSpinner();
-        scheduleInitialPublicRoomsInit();
     }
 
     @Override
@@ -170,7 +171,12 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         mListView.setOnScrollListener(mListScrollListener);
         onRoomResultUpdated(mActivity.getRoomsViewModel().update());
         updateRoomLoadingState();
-        focusFirstRoomRow();
+
+        if (VectorApp.consumeRoomsListResetOnNextResume()) {
+            resetRoomListToTop();
+        } else {
+            focusFirstRoomRow();
+        }
     }
 
     @Override
@@ -178,7 +184,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         super.onPause();
         mEstimatedPublicRoomCount = null;
         mListView.setOnScrollListener(null);
-        mListView.removeCallbacks(mInitialPublicRoomsRunnable);
+        mListView.removeCallbacks(mApplyRoomUpdatesRunnable);
     }
 
     @Override
@@ -240,12 +246,17 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
     @Override
     public void onRoomResultUpdated(final HomeRoomsViewModel.Result result) {
         if (isResumed()) {
-            mRooms = new ArrayList<>(result.getDirectChatsWithFavorites());
-            mRooms.addAll(result.getOtherRoomsWithFavorites());
-            mAdapter.setRooms(mRooms);
-            mAdapter.setInvitation(mActivity.getRoomInvitations());
-            updateRoomLoadingState();
-            focusFirstRoomRow();
+            mPendingRooms.clear();
+            mPendingRooms.addAll(result.getDirectChatsWithFavorites());
+            mPendingRooms.addAll(result.getOtherRoomsWithFavorites());
+
+            mListView.removeCallbacks(mApplyRoomUpdatesRunnable);
+
+            if (mRooms.isEmpty()) {
+                applyPendingRoomUpdate();
+            } else {
+                mListView.postDelayed(mApplyRoomUpdatesRunnable, 75L);
+            }
         }
     }
 
@@ -308,12 +319,53 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         }
     }
 
-    private void scheduleInitialPublicRoomsInit() {
-        mListView.removeCallbacks(mInitialPublicRoomsRunnable);
-        mListView.postDelayed(mInitialPublicRoomsRunnable, 1000L);
+    private void applyPendingRoomUpdate() {
+        mRooms = new ArrayList<>(mPendingRooms);
+        mAdapter.setRooms(mRooms);
+        mAdapter.setInvitation(mActivity.getRoomInvitations());
+        updateRoomLoadingState();
+        focusFirstRoomRow();
+    }
+
+    private void maybeInitPublicRooms(int firstVisibleItem, int visibleItemCount) {
+        if (mHasInitializedPublicRooms || mAdapter == null || visibleItemCount <= 0) {
+            return;
+        }
+
+        int publicHeaderPosition = mAdapter.getPublicRoomsHeaderPosition();
+        int lastVisibleItem = firstVisibleItem + visibleItemCount;
+
+        if (lastVisibleItem >= Math.max(0, publicHeaderPosition - 2)) {
+            initPublicRooms(false);
+        }
     }
 
     private void focusFirstRoomRow() {
+        if (mListView == null || mAdapter == null || mAdapter.getCount() == 0) {
+            return;
+        }
+
+        if (mListView.getSelectedItemPosition() != ListView.INVALID_POSITION
+                || mListView.getCheckedItemPosition() != ListView.INVALID_POSITION) {
+            return;
+        }
+
+        final int firstSelectablePosition = mAdapter.getFirstSelectablePosition();
+        if (firstSelectablePosition == ListView.INVALID_POSITION) {
+            return;
+        }
+
+        mListView.post(new Runnable() {
+            @Override
+            public void run() {
+                mListView.requestFocus();
+                mListView.setSelection(firstSelectablePosition);
+                mListView.setItemChecked(firstSelectablePosition, true);
+            }
+        });
+    }
+
+    private void resetRoomListToTop() {
         if (mListView == null || mAdapter == null || mAdapter.getCount() == 0) {
             return;
         }
@@ -326,6 +378,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         mListView.post(new Runnable() {
             @Override
             public void run() {
+                mListView.clearChoices();
                 mListView.requestFocus();
                 mListView.setSelection(firstSelectablePosition);
                 mListView.setItemChecked(firstSelectablePosition, true);
