@@ -12,8 +12,7 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:descendantFocusability="beforeDescendants"
-        android:focusableInTouchMode="true">
+        android:descendantFocusability="afterDescendants">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/home_toolbar"

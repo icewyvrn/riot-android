@@ -544,7 +544,8 @@
 
         <service
             android:name=".services.EventStreamServiceX"
-            android:exported="false" />
+            android:exported="false"
+            android:stopWithTask="false" />
 
         <service
             android:name=".services.CallService"

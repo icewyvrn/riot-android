@@ -126,6 +126,7 @@ class NotificationDrawerManager(val context: Context) {
         synchronized(eventList) {
             eventList.clear()
         }
+        persistInfo()
         refreshNotificationDrawer(null)
     }
 
@@ -142,6 +143,7 @@ class NotificationDrawerManager(val context: Context) {
             }
             NotificationUtils.cancelNotificationMessage(context, roomId, ROOM_MESSAGES_NOTIFICATION_ID)
         }
+        persistInfo()
         refreshNotificationDrawer(null)
     }
 
@@ -360,7 +362,7 @@ class NotificationDrawerManager(val context: Context) {
 
             if (eventList.isEmpty()) {
                 NotificationUtils.cancelNotificationMessage(context, null, SUMMARY_NOTIFICATION_ID)
-            } else {
+            } else if (firstTime || hasNewEvent) {
                 val nbEvents = roomIdToEventMap.size + simpleEvents.size
                 val sumTitle = context.resources.getQuantityString(
                         R.plurals.notification_compat_summary_title, nbEvents, nbEvents)
@@ -390,6 +392,8 @@ class NotificationDrawerManager(val context: Context) {
                     }
 
                 }
+            } else {
+                Log.d(LOG_TAG, "%%%%%%%% REFRESH NOTIFICATION DRAWER summary is up to date")
             }
             //notice that we can get bit out of sync with actual display but not a big issue
             firstTime = false

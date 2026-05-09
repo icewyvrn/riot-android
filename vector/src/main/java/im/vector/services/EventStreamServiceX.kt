@@ -16,9 +16,12 @@
 
 package im.vector.services
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
+import android.os.SystemClock
 import android.text.TextUtils
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -46,6 +49,7 @@ import org.matrix.androidsdk.data.store.MXStoreListener
 import org.matrix.androidsdk.listeners.MXEventListener
 import org.matrix.androidsdk.rest.model.Event
 import org.matrix.androidsdk.rest.model.bingrules.BingRule
+import java.util.Random
 import java.util.concurrent.TimeUnit
 
 /**
@@ -155,42 +159,20 @@ class EventStreamServiceX : VectorService() {
         // Cancel any previous worker
         cancelAnySimulatedPushSchedule()
 
+        mSession = Matrix.getInstance(applicationContext)!!.defaultSession
+        mPushManager = Matrix.getInstance(applicationContext)!!.pushManager
+
         // no intent : restarted by Android
-        if (null == intent) {
-            // Cannot happen anymore
-            Log.e(LOG_TAG, "onStartCommand : null intent")
+        val action = intent?.action ?: defaultRestartAction().also {
+            Log.i(LOG_TAG, "onStartCommand : null intent, using restart action $it")
+        }
+
+        if (action == null) {
             myStopSelf()
             return START_NOT_STICKY
         }
-        val action = intent.action
 
         Log.i(LOG_TAG, "onStartCommand with action : $action (current state $serviceState)")
-
-        // Manage foreground notification
-        when (action) {
-            ACTION_BOOT_COMPLETE,
-            ACTION_APPLICATION_UPGRADE,
-            ACTION_SIMULATED_PUSH_RECEIVED -> {
-                // Display foreground notification
-                Log.i(LOG_TAG, "startForeground")
-                val notification = NotificationUtils.buildForegroundServiceNotification(this, R.string.notification_sync_in_progress)
-                startForeground(NotificationUtils.NOTIFICATION_ID_FOREGROUND_SERVICE, notification)
-            }
-            ACTION_SIMULATED_PERMANENT_LISTENING -> {
-                // Display foreground notification
-                Log.i(LOG_TAG, "startForeground")
-                val notification = NotificationUtils.buildForegroundServiceNotification(this, R.string.notification_listening_for_events, false)
-                startForeground(NotificationUtils.NOTIFICATION_ID_FOREGROUND_SERVICE, notification)
-            }
-            ACTION_GO_TO_FOREGROUND -> {
-                // Stop foreground notification display
-                Log.i(LOG_TAG, "stopForeground")
-                stopForeground(true)
-            }
-        }
-
-        mSession = Matrix.getInstance(applicationContext)!!.defaultSession
-        mPushManager = Matrix.getInstance(applicationContext)!!.pushManager
 
         if (null == mSession || !mSession!!.isAlive) {
             Log.e(LOG_TAG, "onStartCommand : no sessions")
@@ -205,6 +187,8 @@ class EventStreamServiceX : VectorService() {
             myStopSelf()
             return START_NOT_STICKY
         }
+
+        updateForegroundState(action)
 
         when (action) {
             ACTION_START,
@@ -226,9 +210,10 @@ class EventStreamServiceX : VectorService() {
                 }
             }
             ACTION_STOP,
-            ACTION_GO_TO_BACKGROUND,
             ACTION_LOGOUT ->
                 stop()
+            ACTION_GO_TO_BACKGROUND ->
+                onAppMovedToBackground()
             ACTION_PUSH_RECEIVED,
             ACTION_SIMULATED_PUSH_RECEIVED -> {
 
@@ -248,9 +233,7 @@ class EventStreamServiceX : VectorService() {
 
             ACTION_SIMULATED_PERMANENT_LISTENING -> {
 
-                //Configure the delay and time out for background
-                mSession?.syncDelay = mPushManager?.backgroundSyncDelay ?: 60 * 1000
-                mSession?.syncTimeout = mPushManager?.backgroundSyncTimeOut ?: 6000
+                applyRealtimeBackgroundSyncSettings()
 
                 when (serviceState) {
                     EventStreamServiceX.ServiceState.INIT ->
@@ -279,8 +262,59 @@ class EventStreamServiceX : VectorService() {
             }
         }
 
-        // We don't want the service to be restarted automatically by the System
-        return START_NOT_STICKY
+        return if (shouldStaySticky(action)) START_STICKY else START_NOT_STICKY
+    }
+
+    private fun applyRealtimeBackgroundSyncSettings() {
+        val pushManager = mPushManager
+
+        if (pushManager != null && !pushManager.useFcm()) {
+            // Keep no-GMS background sync close to foreground long-polling.
+            mSession?.syncDelay = 1000
+            mSession?.syncTimeout = 30000
+            return
+        }
+
+        mSession?.syncDelay = pushManager?.backgroundSyncDelay ?: 60 * 1000
+        mSession?.syncTimeout = pushManager?.backgroundSyncTimeOut ?: 6000
+    }
+
+    private fun updateForegroundState(action: String) {
+        when (action) {
+            ACTION_BOOT_COMPLETE,
+            ACTION_APPLICATION_UPGRADE,
+            ACTION_SIMULATED_PUSH_RECEIVED -> {
+                Log.i(LOG_TAG, "startForeground")
+                val notification = NotificationUtils.buildForegroundServiceNotification(this, R.string.notification_sync_in_progress)
+                startForeground(NotificationUtils.NOTIFICATION_ID_FOREGROUND_SERVICE, notification)
+            }
+            ACTION_SIMULATED_PERMANENT_LISTENING -> {
+                Log.i(LOG_TAG, "startForeground")
+                val notification = NotificationUtils.buildForegroundServiceNotification(this, R.string.notification_listening_for_events, false)
+                startForeground(NotificationUtils.NOTIFICATION_ID_FOREGROUND_SERVICE, notification)
+            }
+            ACTION_START,
+            ACTION_GO_TO_FOREGROUND,
+            ACTION_GO_TO_BACKGROUND,
+            ACTION_PUSH_RECEIVED,
+            ACTION_PUSH_UPDATE -> {
+                if (shouldUsePermanentForegroundSync()) {
+                    Log.i(LOG_TAG, "startForeground permanent listening")
+                    val notification = NotificationUtils.buildForegroundServiceNotification(this, R.string.notification_listening_for_events, false)
+                    startForeground(NotificationUtils.NOTIFICATION_ID_FOREGROUND_SERVICE, notification)
+                } else if (action == ACTION_GO_TO_FOREGROUND) {
+                    Log.i(LOG_TAG, "stopForeground")
+                    stopForeground(true)
+                }
+            }
+        }
+    }
+
+    private fun shouldUsePermanentForegroundSync(): Boolean {
+        val pushManager = mPushManager ?: return false
+        return !pushManager.useFcm()
+                && pushManager.isBackgroundSyncAllowed
+                && pushManager.areDeviceNotificationsAllowed()
     }
 
     override fun onDestroy() {
@@ -288,6 +322,12 @@ class EventStreamServiceX : VectorService() {
 
         // Schedule worker?
         configureBackgroundBehavior()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(LOG_TAG, "## onTaskRemoved")
+        scheduleTaskRemovalRestart()
+        super.onTaskRemoved(rootIntent)
     }
 
     /**
@@ -334,6 +374,60 @@ class EventStreamServiceX : VectorService() {
             NotifMode.NOTHING -> {
                 //do nothing
             }
+        }
+    }
+
+    private fun scheduleTaskRemovalRestart() {
+        val restartAction = when (getBackgroundBehavior()) {
+            NotifMode.FDROID_OPTIMIZED_FOR_REALTIME -> ACTION_SIMULATED_PERMANENT_LISTENING
+            NotifMode.FCM_FALLBACK,
+            NotifMode.FDROID_OPTIMIZED_FOR_BATTERY -> ACTION_SIMULATED_PUSH_RECEIVED
+            NotifMode.VIA_FCM,
+            NotifMode.NOTHING -> null
+        } ?: return
+
+        val delay = 3000 + Random().nextInt(5000)
+        Log.i(LOG_TAG, "## scheduleTaskRemovalRestart() : restart $restartAction after $delay ms")
+
+        val restartIntent = Intent(applicationContext, EventStreamServiceX::class.java).apply {
+            action = restartAction
+            `package` = packageName
+        }
+
+        val restartPendingIntent = PendingIntent.getService(
+                applicationContext,
+                1,
+                restartIntent,
+                PendingIntent.FLAG_ONE_SHOT)
+
+        val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        alarmManager?.set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + delay,
+                restartPendingIntent)
+    }
+
+    private fun defaultRestartAction(): String? {
+        return when (getBackgroundBehavior()) {
+            NotifMode.FDROID_OPTIMIZED_FOR_REALTIME -> ACTION_SIMULATED_PERMANENT_LISTENING
+            NotifMode.FCM_FALLBACK,
+            NotifMode.FDROID_OPTIMIZED_FOR_BATTERY -> ACTION_SIMULATED_PUSH_RECEIVED
+            NotifMode.VIA_FCM,
+            NotifMode.NOTHING -> null
+        }
+    }
+
+    private fun shouldStaySticky(action: String): Boolean {
+        return when (action) {
+            ACTION_START,
+            ACTION_GO_TO_FOREGROUND,
+            ACTION_GO_TO_BACKGROUND,
+            ACTION_SIMULATED_PERMANENT_LISTENING,
+            ACTION_SIMULATED_PUSH_RECEIVED,
+            ACTION_PUSH_RECEIVED,
+            ACTION_BOOT_COMPLETE,
+            ACTION_APPLICATION_UPGRADE -> true
+            else -> false
         }
     }
 
@@ -441,6 +535,24 @@ class EventStreamServiceX : VectorService() {
         myStopSelf()
     }
 
+    private fun onAppMovedToBackground() {
+        when (getBackgroundBehavior()) {
+            NotifMode.FDROID_OPTIMIZED_FOR_REALTIME -> {
+                applyRealtimeBackgroundSyncSettings()
+
+                val notification = NotificationUtils.buildForegroundServiceNotification(this, R.string.notification_listening_for_events, false)
+                startForeground(NotificationUtils.NOTIFICATION_ID_FOREGROUND_SERVICE, notification)
+
+                when (serviceState) {
+                    ServiceState.INIT -> start(false)
+                    ServiceState.CATCHUP -> serviceState = ServiceState.STARTED
+                    ServiceState.STARTED -> Unit
+                }
+            }
+            else -> stop()
+        }
+    }
+
     /**
      * internal catchup method.
      *
@@ -525,6 +637,11 @@ class EventStreamServiceX : VectorService() {
                 // User does not want notifications
                 Log.i(LOG_TAG, "## getBackgroundBehavior: NO: user does not want notification")
                 return NotifMode.NOTHING
+            }
+
+            if (!pushManager.useFcm()) {
+                Log.i(LOG_TAG, "## getBackgroundBehavior: Using permanent listening on no-GMS path")
+                return NotifMode.FDROID_OPTIMIZED_FOR_REALTIME
             }
 
             if (pushManager.idFdroidSyncModeOptimizedForRealTime()) {

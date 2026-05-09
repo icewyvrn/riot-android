@@ -927,17 +927,24 @@ public class PreferencesManager {
 
     public static String getFdroidSyncBackgroundMode(Context context) {
         try {
-            return PreferenceManager
+            String mode = PreferenceManager
                     .getDefaultSharedPreferences(context)
-                    .getString(SETTINGS_FDROID_BACKGROUND_SYNC_MODE, FDROID_BACKGROUND_SYNC_MODE_FOR_BATTERY);
+                    .getString(SETTINGS_FDROID_BACKGROUND_SYNC_MODE, FDROID_BACKGROUND_SYNC_MODE_FOR_REALTIME);
+
+            if (FDROID_BACKGROUND_SYNC_MODE_FOR_BATTERY.equals(mode)) {
+                setFdroidSyncBackgroundMode(context, FDROID_BACKGROUND_SYNC_MODE_FOR_REALTIME);
+                return FDROID_BACKGROUND_SYNC_MODE_FOR_REALTIME;
+            }
+
+            return mode;
         } catch (ClassCastException e) {
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit()
                     .remove(SETTINGS_FDROID_BACKGROUND_SYNC_MODE)
-                    .putString(SETTINGS_FDROID_BACKGROUND_SYNC_MODE, FDROID_BACKGROUND_SYNC_MODE_FOR_BATTERY)
+                    .putString(SETTINGS_FDROID_BACKGROUND_SYNC_MODE, FDROID_BACKGROUND_SYNC_MODE_FOR_REALTIME)
                     .apply();
-            setFdroidSyncBackgroundMode(context, FDROID_BACKGROUND_SYNC_MODE_FOR_BATTERY);
-            return FDROID_BACKGROUND_SYNC_MODE_FOR_BATTERY;
+            setFdroidSyncBackgroundMode(context, FDROID_BACKGROUND_SYNC_MODE_FOR_REALTIME);
+            return FDROID_BACKGROUND_SYNC_MODE_FOR_REALTIME;
         }
     }
 
