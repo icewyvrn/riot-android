@@ -86,6 +86,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
     private List<Room> mRooms = new ArrayList<>();
     private final List<Room> mPendingRooms = new ArrayList<>();
     private boolean mHasInitializedPublicRooms;
+    private boolean mResetRoomListToTopOnNextUpdate;
 
     private int mLastVisibleItem = -1;
 
@@ -173,7 +174,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         updateRoomLoadingState();
 
         if (VectorApp.consumeRoomsListResetOnNextResume()) {
-            resetRoomListToTop();
+            mResetRoomListToTopOnNextUpdate = true;
         } else {
             focusFirstRoomRow();
         }
@@ -324,7 +325,13 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         mAdapter.setRooms(mRooms);
         mAdapter.setInvitation(mActivity.getRoomInvitations());
         updateRoomLoadingState();
-        focusFirstRoomRow();
+
+        if (mResetRoomListToTopOnNextUpdate) {
+            mResetRoomListToTopOnNextUpdate = false;
+            resetRoomListToTop();
+        } else {
+            focusFirstRoomRow();
+        }
     }
 
     private void maybeInitPublicRooms(int firstVisibleItem, int visibleItemCount) {
@@ -358,6 +365,9 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         mListView.post(new Runnable() {
             @Override
             public void run() {
+                if (mActivity != null) {
+                    mActivity.clearHomeSearchFocus();
+                }
                 mListView.requestFocus();
                 mListView.setSelection(firstSelectablePosition);
                 mListView.setItemChecked(firstSelectablePosition, true);
@@ -378,9 +388,12 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         mListView.post(new Runnable() {
             @Override
             public void run() {
+                if (mActivity != null) {
+                    mActivity.clearHomeSearchFocus();
+                }
                 mListView.clearChoices();
                 mListView.requestFocus();
-                mListView.setSelection(firstSelectablePosition);
+                mListView.setSelectionFromTop(firstSelectablePosition, 0);
                 mListView.setItemChecked(firstSelectablePosition, true);
             }
         });
