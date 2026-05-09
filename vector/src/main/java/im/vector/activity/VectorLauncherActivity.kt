@@ -19,6 +19,7 @@ package im.vector.activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import im.vector.Matrix
 
 /**
  * This Activity is here only to display a logo when waiting for Riot Application to start
@@ -28,7 +29,30 @@ class VectorLauncherActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        startActivity(Intent(this, LoginActivity::class.java))
+        val targetActivity = if (hasCredentials()) {
+            VectorHomeActivity::class.java
+        } else {
+            LoginActivity::class.java
+        }
+
+        startActivity(Intent(this, targetActivity).apply {
+            action = intent?.action
+            data = intent?.data
+            type = intent?.type
+            if (intent?.extras != null) {
+                putExtras(intent!!.extras!!)
+            }
+        })
+        overridePendingTransition(0, 0)
         finish()
+        overridePendingTransition(0, 0)
+    }
+
+    private fun hasCredentials(): Boolean {
+        return try {
+            Matrix.getInstance(this).defaultSession?.isAlive == true
+        } catch (failure: Exception) {
+            false
+        }
     }
 }

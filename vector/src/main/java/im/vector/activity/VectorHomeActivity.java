@@ -315,11 +315,6 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
             return;
         }
 
-        if (CommonActivityUtils.isGoingToSplash(this)) {
-            Log.d(LOG_TAG, "onCreate : Going to splash screen");
-            return;
-        }
-
         // Waiting View
         setWaitingView(findViewById(R.id.listView_spinner_views));
 
@@ -336,8 +331,6 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         int version = preferences.getInt(PreferencesManager.VERSION_BUILD, 0);
 
-        new ProposeLogout(mSession, this).process();
-
         if (version != BuildConfig.VERSION_CODE) {
             Log.d(LOG_TAG, "The application has been updated from version " + version + " to version " + BuildConfig.VERSION_CODE);
 
@@ -347,44 +340,6 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
                     .putInt(PreferencesManager.VERSION_BUILD, BuildConfig.VERSION_CODE)
                     .apply();
         }
-
-        // Use the SignOutViewModel, it observe the keys backup state and this is what we need here
-        SignOutViewModel model = ViewModelProviders.of(this).get(SignOutViewModel.class);
-
-        model.init(mSession);
-
-        model.getKeysBackupState().observe(this, keysBackupState -> {
-            if (keysBackupState == null) {
-                mKeysBackupBanner.render(KeysBackupBanner.State.Hidden.INSTANCE, false);
-            } else {
-                switch (keysBackupState) {
-                    case Disabled:
-                        mKeysBackupBanner.render(new KeysBackupBanner.State.Setup(model.getNumberOfKeysToBackup()), false);
-                        break;
-                    case NotTrusted:
-                    case WrongBackUpVersion:
-                        // In this case, getCurrentBackupVersion() should not return ""
-                        mKeysBackupBanner.render(new KeysBackupBanner.State.Recover(model.getCurrentBackupVersion()), false);
-                        break;
-                    case WillBackUp:
-                    case BackingUp:
-                        mKeysBackupBanner.render(KeysBackupBanner.State.BackingUp.INSTANCE, false);
-                        break;
-                    case ReadyToBackUp:
-                        if (model.canRestoreKeys()) {
-                            mKeysBackupBanner.render(new KeysBackupBanner.State.Update(model.getCurrentBackupVersion()), false);
-                        } else {
-                            mKeysBackupBanner.render(KeysBackupBanner.State.Hidden.INSTANCE, false);
-                        }
-                        break;
-                    default:
-                        mKeysBackupBanner.render(KeysBackupBanner.State.Hidden.INSTANCE, false);
-                        break;
-                }
-            }
-        });
-
-        mKeysBackupBanner.setDelegate(this);
 
         // Check whether the user has agreed to the use of analytics tracking
 
@@ -543,17 +498,82 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
             }
         }
 
+        for (MXSession session : sessions) {
+            if (session.isAlive() && !session.getDataHandler().getStore().isReady()) {
+                VectorApp.addSyncingSession(session);
+            }
+        }
+
         MenuItem selectedMenuItem = mBottomNavigationView.getMenu().findItem(R.id.bottom_action_rooms);
         if (selectedMenuItem != null) {
             selectedMenuItem.setChecked(true);
-            updateSelectedFragment(selectedMenuItem);
+
+            final MenuItem initialSelectedMenuItem = selectedMenuItem;
+            findViewById(R.id.fragment_container).post(new Runnable() {
+                @Override
+                public void run() {
+                    updateSelectedFragment(initialSelectedMenuItem);
+                }
+            });
         }
 
         // initialize the public rooms list
         PublicRoomsManager.getInstance().setSession(mSession);
-        PublicRoomsManager.getInstance().refreshPublicRoomsCount(null);
 
         initViews();
+
+        findViewById(android.R.id.content).post(new Runnable() {
+            @Override
+            public void run() {
+                initializePostRenderUi();
+            }
+        });
+    }
+
+    private void initializePostRenderUi() {
+        new ProposeLogout(mSession, this).process();
+        initKeysBackupBanner();
+        PublicRoomsManager.getInstance().refreshPublicRoomsCount(null);
+    }
+
+    private void initKeysBackupBanner() {
+        // Use the SignOutViewModel, it observe the keys backup state and this is what we need here
+        SignOutViewModel model = ViewModelProviders.of(this).get(SignOutViewModel.class);
+
+        model.init(mSession);
+
+        model.getKeysBackupState().observe(this, keysBackupState -> {
+            if (keysBackupState == null) {
+                mKeysBackupBanner.render(KeysBackupBanner.State.Hidden.INSTANCE, false);
+            } else {
+                switch (keysBackupState) {
+                    case Disabled:
+                        mKeysBackupBanner.render(new KeysBackupBanner.State.Setup(model.getNumberOfKeysToBackup()), false);
+                        break;
+                    case NotTrusted:
+                    case WrongBackUpVersion:
+                        // In this case, getCurrentBackupVersion() should not return ""
+                        mKeysBackupBanner.render(new KeysBackupBanner.State.Recover(model.getCurrentBackupVersion()), false);
+                        break;
+                    case WillBackUp:
+                    case BackingUp:
+                        mKeysBackupBanner.render(KeysBackupBanner.State.BackingUp.INSTANCE, false);
+                        break;
+                    case ReadyToBackUp:
+                        if (model.canRestoreKeys()) {
+                            mKeysBackupBanner.render(new KeysBackupBanner.State.Update(model.getCurrentBackupVersion()), false);
+                        } else {
+                            mKeysBackupBanner.render(KeysBackupBanner.State.Hidden.INSTANCE, false);
+                        }
+                        break;
+                    default:
+                        mKeysBackupBanner.render(KeysBackupBanner.State.Hidden.INSTANCE, false);
+                        break;
+                }
+            }
+        });
+
+        mKeysBackupBanner.setDelegate(this);
     }
 
     /**

@@ -80,8 +80,17 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
 
     // rooms list
     private List<Room> mRooms = new ArrayList<>();
+    private boolean mHasInitializedPublicRooms;
 
     private int mLastVisibleItem = -1;
+    private final Runnable mInitialPublicRoomsRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isAdded() && !mHasInitializedPublicRooms) {
+                initPublicRooms(false);
+            }
+        }
+    };
 
     private final AbsListView.OnScrollListener mListScrollListener = new AbsListView.OnScrollListener() {
         @Override
@@ -146,7 +155,8 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             mSelectedRoomDirectory = (RoomDirectoryData) savedInstanceState.getSerializable(SELECTED_ROOM_DIRECTORY);
         }
 
-        initPublicRooms(false);
+        refreshDirectorySourceSpinner();
+        scheduleInitialPublicRoomsInit();
     }
 
     @Override
@@ -162,6 +172,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         super.onPause();
         mEstimatedPublicRoomCount = null;
         mListView.setOnScrollListener(null);
+        mListView.removeCallbacks(mInitialPublicRoomsRunnable);
     }
 
     @Override
@@ -194,6 +205,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
                 }
 
                 // trigger the public rooms search to avoid unexpected list refresh
+                mHasInitializedPublicRooms = true;
                 initPublicRooms(false);
             }
         });
@@ -207,6 +219,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
                 Log.i(LOG_TAG, "onResetFilter " + count);
 
                 // trigger the public rooms search to avoid unexpected list refresh
+                mHasInitializedPublicRooms = true;
                 initPublicRooms(false);
             }
         });
@@ -273,6 +286,11 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
                 }
             }
         });
+    }
+
+    private void scheduleInitialPublicRoomsInit() {
+        mListView.removeCallbacks(mInitialPublicRoomsRunnable);
+        mListView.postDelayed(mInitialPublicRoomsRunnable, 1000L);
     }
 
     private void focusFirstRoomRow() {
@@ -414,6 +432,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             if (requestCode == DIRECTORY_SOURCE_ACTIVITY_REQUEST_CODE) {
                 mSelectedRoomDirectory = (RoomDirectoryData) data.getSerializableExtra(RoomDirectoryPickerActivity.EXTRA_OUT_ROOM_DIRECTORY_DATA);
                 mAdapter.setPublicRooms(new ArrayList<PublicRoom>());
+                mHasInitializedPublicRooms = true;
                 initPublicRooms(true);
             }
         }
@@ -439,6 +458,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
      * @param displayOnTop true to display the public rooms in full screen
      */
     private void initPublicRooms(final boolean displayOnTop) {
+        mHasInitializedPublicRooms = true;
         refreshDirectorySourceSpinner();
 
         showPublicRoomsLoadingView();

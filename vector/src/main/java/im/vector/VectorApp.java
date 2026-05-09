@@ -144,6 +144,9 @@ public class VectorApp extends MultiDexApplication {
     private NotificationDrawerManager mNotificationDrawerManager;
 
     public NotificationDrawerManager getNotificationDrawerManager() {
+        if (mNotificationDrawerManager == null) {
+            mNotificationDrawerManager = new NotificationDrawerManager(this);
+        }
         return mNotificationDrawerManager;
     }
 
@@ -159,6 +162,25 @@ public class VectorApp extends MultiDexApplication {
 
     private Analytics mAppAnalytics;
     private DecryptionFailureTracker mDecryptionFailureTracker;
+
+    private void initDeferredStartupTasks() {
+        if (mMarkdownParser == null) {
+            try {
+                mMarkdownParser = new VectorMarkdownParser(this);
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "cannot create the mMarkdownParser " + e.getMessage(), e);
+            }
+        }
+
+        if (mRageShake == null) {
+            mRageShake = new RageShake(this);
+        }
+
+        getNotificationDrawerManager();
+        getAnalytics();
+        getDecryptionFailureTracker();
+        visitSessionVariables();
+    }
 
     /**
      * @return the current instance
@@ -211,7 +233,6 @@ public class VectorApp extends MultiDexApplication {
         }
 
         VectorUtils.initAvatarColors(this);
-        mNotificationDrawerManager = new NotificationDrawerManager(this);
         NotificationUtils.INSTANCE.createNotificationChannels(this);
 
         // init the REST client
@@ -221,8 +242,6 @@ public class VectorApp extends MultiDexApplication {
 
         instance = this;
         mCallsManager = new CallsManager(this);
-        mAppAnalytics = new AppAnalytics(this, new MatomoAnalytics(this));
-        mDecryptionFailureTracker = new DecryptionFailureTracker(mAppAnalytics);
 
         mActivityTransitionTimer = null;
         mActivityTransitionTimerTask = null;
@@ -258,8 +277,6 @@ public class VectorApp extends MultiDexApplication {
         Log.d(LOG_TAG, " Local time: " + (new SimpleDateFormat("MM-dd HH:mm:ss.SSSZ", Locale.US)).format(new Date()));
         Log.d(LOG_TAG, "----------------------------------------------------------------");
         Log.d(LOG_TAG, "----------------------------------------------------------------\n\n\n\n");
-
-        mRageShake = new RageShake(this);
 
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             final Map<String, String> mLocalesByActivity = new HashMap<>();
@@ -349,14 +366,6 @@ public class VectorApp extends MultiDexApplication {
             }
         });
 
-        // create the markdown parser
-        try {
-            mMarkdownParser = new VectorMarkdownParser(this);
-        } catch (Exception e) {
-            // reported by GA
-            Log.e(LOG_TAG, "cannot create the mMarkdownParser " + e.getMessage(), e);
-        }
-
         // track external language updates
         // local update from the settings
         // or screen rotation !
@@ -365,7 +374,13 @@ public class VectorApp extends MultiDexApplication {
 
         PreferencesManager.fixMigrationIssues(this);
         initApplicationLocale();
-        visitSessionVariables();
+
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                initDeferredStartupTasks();
+            }
+        });
     }
 
     @Override
@@ -439,7 +454,9 @@ public class VectorApp extends MultiDexApplication {
 
         MyPresenceManager.advertiseAllUnavailable();
 
-        mRageShake.stop();
+        if (mRageShake != null) {
+            mRageShake.stop();
+        }
 
         onAppPause();
     }
@@ -544,6 +561,9 @@ public class VectorApp extends MultiDexApplication {
         }
 
         MyPresenceManager.advertiseAllOnline();
+        if (mRageShake == null) {
+            mRageShake = new RageShake(this);
+        }
         mRageShake.start();
 
         mIsCallingInBackground = false;
@@ -594,6 +614,9 @@ public class VectorApp extends MultiDexApplication {
      * @return the analytics app instance
      */
     public Analytics getAnalytics() {
+        if (mAppAnalytics == null) {
+            mAppAnalytics = new AppAnalytics(this, new MatomoAnalytics(this));
+        }
         return mAppAnalytics;
     }
 
@@ -601,6 +624,9 @@ public class VectorApp extends MultiDexApplication {
      * @return the DecryptionFailureTracker instance
      */
     public DecryptionFailureTracker getDecryptionFailureTracker() {
+        if (mDecryptionFailureTracker == null) {
+            mDecryptionFailureTracker = new DecryptionFailureTracker(getAnalytics());
+        }
         return mDecryptionFailureTracker;
     }
 
@@ -860,18 +886,19 @@ public class VectorApp extends MultiDexApplication {
      * Send session custom variables
      */
     private void visitSessionVariables() {
-        mAppAnalytics.visitVariable(1, "App Platform", "Android Platform");
-        mAppAnalytics.visitVariable(2, "App Version", BuildConfig.VERSION_NAME);
-        mAppAnalytics.visitVariable(4, "Chosen Language", VectorLocale.INSTANCE.getApplicationLocale().toString());
+        Analytics analytics = getAnalytics();
+        analytics.visitVariable(1, "App Platform", "Android Platform");
+        analytics.visitVariable(2, "App Version", BuildConfig.VERSION_NAME);
+        analytics.visitVariable(4, "Chosen Language", VectorLocale.INSTANCE.getApplicationLocale().toString());
 
         final MXSession session = Matrix.getInstance(this).getDefaultSession();
         if (session != null) {
-            mAppAnalytics.visitVariable(7, "Homeserver URL", session.getHomeServerConfig().getHomeserverUri().toString());
+            analytics.visitVariable(7, "Homeserver URL", session.getHomeServerConfig().getHomeserverUri().toString());
             String identityServerUrl = session.getIdentityServerManager().getIdentityServerUrl();
             if (identityServerUrl == null) {
-                mAppAnalytics.visitVariable(8, "Identity Server URL", "");
+                analytics.visitVariable(8, "Identity Server URL", "");
             } else {
-                mAppAnalytics.visitVariable(8, "Identity Server URL", identityServerUrl);
+                analytics.visitVariable(8, "Identity Server URL", identityServerUrl);
             }
         }
     }
@@ -886,15 +913,18 @@ public class VectorApp extends MultiDexApplication {
                 + "/" + BuildConfig.FLAVOR_DESCRIPTION
                 + "/" + BuildConfig.VERSION_NAME
                 + "/" + activity.getClass().getName().replace(".", "/");
-        mAppAnalytics.trackScreen(screenPath, null);
+        getAnalytics().trackScreen(screenPath, null);
     }
 
     /**
      * The application is paused.
      */
     private void onAppPause() {
-        mDecryptionFailureTracker.dispatch();
-        mAppAnalytics.forceDispatch();
-        mNotificationDrawerManager.persistInfo();
+        getDecryptionFailureTracker().dispatch();
+        getAnalytics().forceDispatch();
+
+        if (mNotificationDrawerManager != null) {
+            mNotificationDrawerManager.persistInfo();
+        }
     }
 }

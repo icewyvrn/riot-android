@@ -5,7 +5,8 @@
 
     <!-- Launcher Theme, only used for VectorLauncherActivity (will be use even before the Activity is started) -->
     <style name="AppTheme.Launcher" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowDisablePreview">true</item>
 
         <item name="colorPrimaryDark">@color/primary_color_dark</item>
     </style>

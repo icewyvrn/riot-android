@@ -30,9 +30,6 @@ import org.matrix.androidsdk.MXSession;
 import org.matrix.androidsdk.core.Log;
 import org.matrix.androidsdk.core.callback.ApiCallback;
 import org.matrix.androidsdk.core.model.MatrixError;
-import org.matrix.androidsdk.listeners.IMXEventListener;
-import org.matrix.androidsdk.listeners.MXEventListener;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -40,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 
 import butterknife.BindView;
-import im.vector.ErrorListener;
 import im.vector.Matrix;
 import im.vector.R;
 import im.vector.VectorApp;
@@ -58,9 +54,6 @@ public class SplashActivity extends MXCActionBarActivity {
 
     public static final String EXTRA_MATRIX_ID = "EXTRA_MATRIX_ID";
     public static final String EXTRA_ROOM_ID = "EXTRA_ROOM_ID";
-
-    private Map<MXSession, IMXEventListener> mListeners = new HashMap<>();
-    private Map<MXSession, IMXEventListener> mDoneListeners = new HashMap<>();
 
     private final long mLaunchTime = System.currentTimeMillis();
 
@@ -172,60 +165,49 @@ public class SplashActivity extends MXCActionBarActivity {
             ((AnimationDrawable) background).start();
         }
 
-        // Check the lazy loading status
-        checkLazyLoadingStatus(sessions);
+        maybeEnableLazyLoadingInBackground(sessions);
+        startEventStreamService(sessions);
     }
 
-    private void checkLazyLoadingStatus(final List<MXSession> sessions) {
+    private void maybeEnableLazyLoadingInBackground(final List<MXSession> sessions) {
         // Note: currently Riot uses a simple boolean to enable or disable LL, and does not support multi sessions
         // If it was the case, every session may not support LL. So for the moment, only consider 1 session
         if (sessions.size() != 1) {
-            // Go to next step
-            startEventStreamService(sessions);
+            return;
         }
+
         // If LL is already ON, nothing to do
         if (PreferencesManager.useLazyLoading(this)) {
-            // Go to next step
-            startEventStreamService(sessions);
+            return;
         } else {
             // Check that user has not explicitly disabled the lazy loading
             if (PreferencesManager.hasUserRefusedLazyLoading(this)) {
-                // Go to next step
-                startEventStreamService(sessions);
+                return;
             } else {
-                // Try to enable LL
+                // Probe LL support without blocking the home screen.
                 final MXSession session = sessions.get(0);
 
                 session.canEnableLazyLoading(new ApiCallback<Boolean>() {
                     @Override
                     public void onNetworkError(Exception e) {
-                        // Ignore, maybe next time
-                        startEventStreamService(sessions);
+                        // Ignore, maybe next time.
                     }
 
                     @Override
                     public void onMatrixError(MatrixError e) {
-                        // Ignore, maybe next time
-                        startEventStreamService(sessions);
+                        // Ignore, maybe next time.
                     }
 
                     @Override
                     public void onUnexpectedError(Exception e) {
-                        // Ignore, maybe next time
-                        startEventStreamService(sessions);
+                        // Ignore, maybe next time.
                     }
 
                     @Override
                     public void onSuccess(Boolean info) {
                         if (info) {
-                            // We can enable lazy loading
+                            // Enable LL for the next launch without reloading sessions now.
                             PreferencesManager.setUseLazyLoading(SplashActivity.this, true);
-
-                            // Reload the sessions
-                            Matrix.getInstance(SplashActivity.this).reloadSessions(SplashActivity.this, true);
-                        } else {
-                            // Maybe in the future this home server will support it
-                            startEventStreamService(sessions);
                         }
                     }
                 });
@@ -237,62 +219,8 @@ public class SplashActivity extends MXCActionBarActivity {
         List<String> matrixIds = new ArrayList<>();
 
         for (final MXSession session : sessions) {
-            final MXSession fSession = session;
-
-            final IMXEventListener eventListener = new MXEventListener() {
-                private void onReady() {
-                    boolean isAlreadyDone;
-
-                    synchronized (LOG_TAG) {
-                        isAlreadyDone = mDoneListeners.containsKey(fSession);
-                    }
-
-                    if (!isAlreadyDone) {
-                        synchronized (LOG_TAG) {
-                            boolean noMoreListener;
-
-                            Log.e(LOG_TAG, "Session " + fSession.getCredentials().userId + " is initialized");
-
-                            mDoneListeners.put(fSession, mListeners.get(fSession));
-                            // do not remove the listeners here
-                            // it crashes the application because of the upper loop
-                            //fSession.getDataHandler().removeListener(mListeners.get(fSession));
-                            // remove from the pending list
-
-                            mListeners.remove(fSession);
-                            noMoreListener = (mListeners.size() == 0);
-
-                            if (noMoreListener) {
-                                VectorApp.addSyncingSession(session);
-                                onFinish();
-                            }
-                        }
-                    }
-                }
-
-                // should be called if the application was already initialized
-                @Override
-                public void onLiveEventsChunkProcessed(String fromToken, String toToken) {
-                    onReady();
-                }
-
-                // first application launched
-                @Override
-                public void onInitialSyncComplete(String toToken) {
-                    onReady();
-                }
-            };
-
-            if (!fSession.getDataHandler().isInitialSyncComplete()) {
-                session.getDataHandler().getStore().open();
-
-                mListeners.put(fSession, eventListener);
-                fSession.getDataHandler().addListener(eventListener);
-
-                // Set the main error listener
-                fSession.setFailureCallback(new ErrorListener(fSession, this));
-
-                // session to activate
+            if (!session.getDataHandler().isInitialSyncComplete()) {
+                VectorApp.addSyncingSession(session);
                 matrixIds.add(session.getCredentials().userId);
             }
         }
@@ -315,32 +243,11 @@ public class SplashActivity extends MXCActionBarActivity {
         PushManager pushManager = Matrix.getInstance(getApplicationContext()).getPushManager();
         pushManager.deepCheckRegistration(this);
 
-        boolean noUpdate;
-
-        synchronized (LOG_TAG) {
-            noUpdate = (mListeners.size() == 0);
-        }
-
-        // nothing to do ?
-        // just dismiss the activity
-        if (noUpdate) {
-            // do not launch an activity if there was nothing new.
-            Log.e(LOG_TAG, "nothing to do");
-            onFinish();
-        }
+        onFinish();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-
-        Collection<MXSession> sessions = mDoneListeners.keySet();
-
-        for (MXSession session : sessions) {
-            if (session.isAlive()) {
-                session.getDataHandler().removeListener(mDoneListeners.get(session));
-                session.setFailureCallback(null);
-            }
-        }
     }
 }
