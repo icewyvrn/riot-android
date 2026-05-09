@@ -1144,6 +1144,7 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
         mSearchView.setSearchableInfo(searchManager.getSearchableInfo(getComponentName()));
         mSearchView.setIconifiedByDefault(false);
         mSearchView.setOnQueryTextListener(this);
+        clearHomeSearchFocus();
 
         // Set here background of labels, cause we cannot set attr color in drawable on API < 21
         Class menuClass = FloatingActionsMenu.class;
@@ -1198,7 +1199,19 @@ public class VectorHomeActivity extends VectorAppCompatActivity implements Searc
      */
     private void resetFilter() {
         mSearchView.setQuery("", false);
-        mSearchView.clearFocus();
+        clearHomeSearchFocus();
+    }
+
+    public void clearHomeSearchFocus() {
+        if (mSearchView != null) {
+            mSearchView.clearFocus();
+
+            EditText edit = mSearchView.findViewById(com.google.android.material.R.id.search_src_text);
+            if (edit != null) {
+                edit.clearFocus();
+            }
+        }
+
         hideKeyboard();
     }
 
