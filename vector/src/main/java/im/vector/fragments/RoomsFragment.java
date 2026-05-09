@@ -48,6 +48,7 @@ import java.util.Map;
 import butterknife.BindView;
 import im.vector.PublicRoomsManager;
 import im.vector.R;
+import im.vector.VectorApp;
 import im.vector.activity.CommonActivityUtils;
 import im.vector.activity.RoomDirectoryPickerActivity;
 import im.vector.activity.VectorRoomActivity;
@@ -71,6 +72,9 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
 
     @BindView(R.id.listview)
     ListView mListView;
+
+    @BindView(R.id.rooms_loading_view)
+    View mLoadingView;
 
     // rooms management
     private RoomsListAdapter mAdapter;
@@ -164,6 +168,8 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         super.onResume();
         mAdapter.setInvitation(mActivity.getRoomInvitations());
         mListView.setOnScrollListener(mListScrollListener);
+        onRoomResultUpdated(mActivity.getRoomsViewModel().update());
+        updateRoomLoadingState();
         focusFirstRoomRow();
     }
 
@@ -238,6 +244,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
             mRooms.addAll(result.getOtherRoomsWithFavorites());
             mAdapter.setRooms(mRooms);
             mAdapter.setInvitation(mActivity.getRoomInvitations());
+            updateRoomLoadingState();
             focusFirstRoomRow();
         }
     }
@@ -256,6 +263,7 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
         mListView.setFocusable(true);
         mListView.setFocusableInTouchMode(true);
         mListView.setSelector(R.drawable.bb_holo_list_selector);
+        updateRoomLoadingState();
 
         mAdapter = new RoomsListAdapter(getActivity(), mSession, new RoomAdapter.OnSelectItemListener() {
             @Override
@@ -287,6 +295,17 @@ public class RoomsFragment extends AbsHomeFragment implements AbsHomeFragment.On
                 }
             }
         });
+    }
+
+    private void updateRoomLoadingState() {
+        if (mLoadingView != null) {
+            boolean isStoreReady = mSession != null
+                    && mSession.getDataHandler() != null
+                    && mSession.getDataHandler().getStore() != null
+                    && mSession.getDataHandler().getStore().isReady();
+            boolean isWaitingForInitialRooms = mRooms.isEmpty() && (!isStoreReady || VectorApp.isSessionSyncing(mSession));
+            mLoadingView.setVisibility(isWaitingForInitialRooms ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void scheduleInitialPublicRoomsInit() {

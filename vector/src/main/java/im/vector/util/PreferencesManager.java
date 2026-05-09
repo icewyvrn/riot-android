@@ -305,7 +305,7 @@ public class PreferencesManager {
      * @return true if the time must be displayed in 12h format
      */
     public static boolean displayTimeIn12hFormat(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_12_24_TIMESTAMPS_KEY, false);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_12_24_TIMESTAMPS_KEY, true);
     }
 
     /**
@@ -315,7 +315,7 @@ public class PreferencesManager {
      * @return true if the join and leave membership events should be shown in the messages list
      */
     public static boolean showJoinLeaveMessages(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SHOW_JOIN_LEAVE_MESSAGES_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SHOW_JOIN_LEAVE_MESSAGES_KEY, false);
     }
 
     /**
@@ -325,7 +325,7 @@ public class PreferencesManager {
      * @return true true if the avatar and display name events should be shown in the messages list.
      */
     public static boolean showAvatarDisplayNameChangeMessages(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SHOW_AVATAR_DISPLAY_NAME_CHANGES_MESSAGES_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SHOW_AVATAR_DISPLAY_NAME_CHANGES_MESSAGES_KEY, false);
     }
 
     /**
@@ -335,7 +335,7 @@ public class PreferencesManager {
      * @return true to use the native camera app to record video or take photo.
      */
     public static boolean useNativeCamera(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_USE_NATIVE_CAMERA_PREFERENCE_KEY, false);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_USE_NATIVE_CAMERA_PREFERENCE_KEY, true);
     }
 
     /**
@@ -375,7 +375,7 @@ public class PreferencesManager {
      * @return true if shutter sound should play
      */
     public static boolean useShutterSound(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_PLAY_SHUTTER_SOUND_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_PLAY_SHUTTER_SOUND_KEY, false);
     }
 
     /**
@@ -531,7 +531,7 @@ public class PreferencesManager {
      * @return true if the data save mode is enabled
      */
     public static boolean useDataSaveMode(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_DATA_SAVE_MODE_PREFERENCE_KEY, false);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_DATA_SAVE_MODE_PREFERENCE_KEY, true);
     }
 
     /**
@@ -541,7 +541,7 @@ public class PreferencesManager {
      * @return true if the conference call must be done with jitsi.
      */
     public static boolean useJitsiConfCall(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_USE_JITSI_CONF_PREFERENCE_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_USE_JITSI_CONF_PREFERENCE_KEY, false);
     }
 
     /**
@@ -737,7 +737,7 @@ public class PreferencesManager {
      * @return true if the markdown is enabled
      */
     public static boolean isMarkdownEnabled(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_ENABLE_MARKDOWN_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_ENABLE_MARKDOWN_KEY, false);
     }
 
     /**
@@ -760,7 +760,7 @@ public class PreferencesManager {
      * @return true if the read receipts should be shown
      */
     public static boolean showReadReceipts(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SHOW_READ_RECEIPTS_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SHOW_READ_RECEIPTS_KEY, false);
     }
 
     /**
@@ -770,7 +770,7 @@ public class PreferencesManager {
      * @return true if the message timestamps must be always shown
      */
     public static boolean alwaysShowTimeStamps(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_ALWAYS_SHOW_TIMESTAMPS_KEY, false);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_ALWAYS_SHOW_TIMESTAMPS_KEY, true);
     }
 
     /**
@@ -780,7 +780,7 @@ public class PreferencesManager {
      * @return true to send the typing notifs
      */
     public static boolean sendTypingNotifs(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SEND_TYPING_NOTIF_KEY, true);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SEND_TYPING_NOTIF_KEY, false);
     }
 
     /**
@@ -865,7 +865,7 @@ public class PreferencesManager {
      * @return true to preview media
      */
     public static boolean previewMediaWhenSending(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_PREVIEW_MEDIA_BEFORE_SENDING_KEY, false);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_PREVIEW_MEDIA_BEFORE_SENDING_KEY, true);
     }
 
     /**
@@ -875,7 +875,7 @@ public class PreferencesManager {
      * @return true to send message with enter
      */
     public static boolean sendMessageWithEnter(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SEND_MESSAGE_WITH_ENTER, false);
+        return PreferenceManager.getDefaultSharedPreferences(context).getBoolean(SETTINGS_SEND_MESSAGE_WITH_ENTER, true);
     }
 
     /**

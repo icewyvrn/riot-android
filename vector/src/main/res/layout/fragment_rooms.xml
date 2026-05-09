@@ -11,4 +11,19 @@
         android:descendantFocusability="blocksDescendants"
         android:drawSelectorOnTop="true"
         android:listSelector="@drawable/bb_holo_list_selector" />
+
+    <FrameLayout
+        android:id="@+id/rooms_loading_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?attr/vctr_waiting_background_color"
+        android:clickable="true"
+        android:visibility="visible">
+
+        <ProgressBar
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:contentDescription="@string/loading" />
+    </FrameLayout>
 </RelativeLayout>

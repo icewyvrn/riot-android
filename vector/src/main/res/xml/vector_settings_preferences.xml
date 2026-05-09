@@ -80,6 +80,7 @@
             android:title="@string/settings_interface_language" />
 
         <im.vector.preference.VectorListPreference
+            android:defaultValue="black"
             android:entries="@array/theme_entries"
             android:entryValues="@array/theme_values"
             android:key="APPLICATION_THEME_KEY"
@@ -99,39 +100,41 @@
             android:title="@string/settings_inline_url_preview" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_SEND_TYPING_NOTIF_KEY"
             android:summary="@string/settings_send_typing_notifs_summary"
             android:title="@string/settings_send_typing_notifs" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_ENABLE_MARKDOWN_KEY"
             android:summary="@string/settings_send_markdown_summary"
             android:title="@string/settings_send_markdown" />
 
         <im.vector.preference.VectorSwitchPreference
+            android:defaultValue="true"
             android:key="SETTINGS_ALWAYS_SHOW_TIMESTAMPS_KEY"
             android:title="@string/settings_always_show_timestamps" />
 
         <im.vector.preference.VectorSwitchPreference
+            android:defaultValue="true"
             android:key="SETTINGS_12_24_TIMESTAMPS_KEY"
             android:title="@string/settings_12_24_timestamps" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_SHOW_READ_RECEIPTS_KEY"
             android:summary="@string/settings_show_read_receipts_summary"
             android:title="@string/settings_show_read_receipts" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_SHOW_JOIN_LEAVE_MESSAGES_KEY"
             android:summary="@string/settings_show_join_leave_messages_summary"
             android:title="@string/settings_show_join_leave_messages" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_SHOW_AVATAR_DISPLAY_NAME_CHANGES_MESSAGES_KEY"
             android:summary="@string/settings_show_avatar_display_name_changes_messages_summary"
             android:title="@string/settings_show_avatar_display_name_changes_messages" />
@@ -141,6 +144,7 @@
             android:title="@string/settings_vibrate_on_mention" />
 
         <im.vector.preference.VectorSwitchPreference
+            android:defaultValue="true"
             android:key="SETTINGS_SEND_MESSAGE_WITH_ENTER"
             android:summary="@string/settings_send_message_with_enter_summary"
             android:title="@string/settings_send_message_with_enter" />
@@ -268,17 +272,19 @@
     <im.vector.preference.VectorPreferenceCategory android:title="@string/settings_media">
 
         <im.vector.preference.VectorSwitchPreference
+            android:defaultValue="true"
             android:key="SETTINGS_USE_NATIVE_CAMERA_PREFERENCE_KEY"
             android:summary="@string/settings_labs_native_camera_summary"
             android:title="@string/settings_labs_native_camera" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_PLAY_SHUTTER_SOUND_KEY"
 
             android:title="@string/settings_play_shutter_sound" />
 
         <im.vector.preference.VectorSwitchPreference
+            android:defaultValue="true"
             android:key="SETTINGS_PREVIEW_MEDIA_BEFORE_SENDING_KEY"
             android:title="@string/settings_preview_media_before_sending" />
 
@@ -354,12 +360,13 @@
             android:title="@string/settings_lazy_loading_title" />
 
         <im.vector.preference.VectorSwitchPreference
+            android:defaultValue="true"
             android:key="SETTINGS_DATA_SAVE_MODE_PREFERENCE_KEY"
             android:summary="@string/settings_data_save_mode_summary"
             android:title="@string/settings_data_save_mode" />
 
         <im.vector.preference.VectorSwitchPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="SETTINGS_USE_JITSI_CONF_PREFERENCE_KEY"
             android:title="@string/settings_labs_create_conference_with_jitsi" />
 
