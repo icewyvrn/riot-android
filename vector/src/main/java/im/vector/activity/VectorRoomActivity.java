@@ -1031,7 +1031,7 @@ public class VectorRoomActivity extends MXCActionBarActivity implements
             } else {
                 mReadMarkerManager = new ReadMarkerManager(this, mVectorMessageListFragment, mSession, mRoom,
                         mIsUnreadPreviewMode ? ReadMarkerManager.PREVIEW_MODE : ReadMarkerManager.LIVE_MODE,
-                        findViewById(R.id.jump_to_first_unread));
+                    null);
             }
         }
 

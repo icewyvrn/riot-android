@@ -272,7 +272,7 @@ public class ReadMarkerManager implements VectorMessagesAdapter.ReadMarkerListen
      */
     private void checkUnreadMessage() {
         Log.d(LOG_TAG, "checkUnreadMessage");
-        if (mJumpToUnreadView.getVisibility() != View.VISIBLE) {
+        if (mJumpToUnreadView == null || mJumpToUnreadView.getVisibility() != View.VISIBLE) {
             final String readReceiptEventId = mRoomSummary.getReadReceiptEventId();
             if (mReadMarkerEventId != null && !mReadMarkerEventId.equals(readReceiptEventId)) {
                 if (isLiveMode() && !mHasJumpedToFirstUnread) {
@@ -376,6 +376,14 @@ public class ReadMarkerManager implements VectorMessagesAdapter.ReadMarkerListen
             if (mVectorMessageListFragment.getMessageAdapter() != null) {
                 mVectorMessageListFragment.getMessageAdapter().updateReadMarker(mReadMarkerEventId, readReceiptEventId);
             }
+        }
+
+        if (mJumpToUnreadView == null || mCloseJumpToUnreadView == null || mJumpToUnreadViewSpinner == null) {
+            if (mHasJumpedToBottom) {
+                mHasJumpedToBottom = false;
+                checkUnreadMessage();
+            }
+            return;
         }
 
         // Update "jump to" view's visibility
